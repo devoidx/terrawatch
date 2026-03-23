@@ -11,8 +11,6 @@ services:
     build: ./backend
     ports:
       - "8001:8000"
-    volumes:
-      - ./backend:/app
     environment:
       - DATABASE_URL=postgresql://terrawatch:terrawatch@db:5432/terrawatch
       - SECRET_KEY=${SECRET_KEY}
@@ -39,7 +37,7 @@ services:
       POSTGRES_PASSWORD: terrawatch
       POSTGRES_DB: terrawatch
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql

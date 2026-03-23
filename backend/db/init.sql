@@ -67,7 +67,7 @@ INSERT INTO users (username, email, password_hash, is_admin)
 VALUES (
     'admin',
     'admin@terrawatch.local',
-    '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW',
+    '$2b$12$BV6B/HJpVR5Xu4zBaGWt/OMgnJ4iGdHdj2jAc4hTg3bImv/UO/Xqe',
     TRUE
 ) ON CONFLICT DO NOTHING;
 
