@@ -80,5 +80,14 @@ ON CONFLICT DO NOTHING;
 INSERT INTO settings (key, value) VALUES
     ('usgs_poll_interval_seconds', '120'),
     ('volcano_poll_interval_seconds', '300'),
-    ('app_name', 'TerraWatch')
+    ('app_name', 'TerraWatch'),
+    ('smtp_provider', 'smtp'),
+    ('smtp_host', ''),
+    ('smtp_port', '587'),
+    ('smtp_user', ''),
+    ('smtp_password', ''),
+    ('smtp_from', ''),
+    ('smtp_use_tls', 'true'),
+    ('gmail_address', ''),
+    ('gmail_app_password', '')
 ON CONFLICT DO NOTHING;

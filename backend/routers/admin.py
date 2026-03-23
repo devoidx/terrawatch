@@ -155,3 +155,33 @@ def update_setting(
     db.commit()
     db.refresh(setting)
     return setting
+
+
+# ── Email settings + test ─────────────────────────────────────────────────────
+
+class SmtpSettingsUpdate(BaseModel):
+    smtp_provider:    str = "smtp"
+    smtp_host:        str = ""
+    smtp_port:        str = "587"
+    smtp_user:        str = ""
+    smtp_password:    str = ""
+    smtp_from:        str = ""
+    smtp_use_tls:     str = "true"
+    gmail_address:    str = ""
+    gmail_app_password: str = ""
+
+
+@router.patch("/settings/smtp")
+def update_smtp_settings(
+    data: SmtpSettingsUpdate,
+    _: models.User = Depends(auth.require_admin),
+    db: Session = Depends(get_db),
+):
+    for key, value in data.model_dump().items():
+        setting = db.query(models.Setting).filter(models.Setting.key == key).first()
+        if setting:
+            setting.value = value
+        else:
+            db.add(models.Setting(key=key, value=value))
+    db.commit()
+    return {"message": "Email settings saved"}

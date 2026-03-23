@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Box, VStack, HStack, Text, Button, Badge, useToast,
   Table, Thead, Tbody, Tr, Th, Td, TableContainer,
@@ -7,11 +7,13 @@ import {
   AlertDialog, AlertDialogBody, AlertDialogFooter,
   AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
   Stat, StatLabel, StatNumber, SimpleGrid, Card, CardBody,
+  Select, InputGroup, InputRightElement,
 } from '@chakra-ui/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   adminGetUsers, adminUpdateUser, adminDeleteUser,
   adminGetRegions, adminGetSentAlerts, adminGetSettings, adminUpdateSetting,
+  adminUpdateSmtp, adminTestSmtp
 } from '../api'
 
 // ── Users tab ─────────────────────────────────────────────────────────────────
@@ -246,48 +248,201 @@ function SettingsTab() {
   const { data: settings, isLoading } = useQuery({
     queryKey: ['admin-settings'], queryFn: adminGetSettings,
   })
-  const [edits, setEdits] = useState({})
-  const [saving, setSaving] = useState({})
 
-  const save = async (key) => {
-    setSaving(s => ({ ...s, [key]: true }))
+  const [provider, setProvider] = useState('smtp')
+  const [smtp, setSmtp] = useState({
+    smtp_host: '', smtp_port: '587', smtp_user: '',
+    smtp_password: '', smtp_from: '', smtp_use_tls: 'true',
+  })
+  const [gmail, setGmail] = useState({
+    gmail_address: '', gmail_app_password: '',
+  })
+  const [saving, setSaving]   = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [showPw, setShowPw]   = useState(false)
+
+  useEffect(() => {
+    if (!settings) return
+    const map = Object.fromEntries(settings.map(s => [s.key, s.value]))
+    setProvider(map.smtp_provider || 'smtp')
+    setSmtp({
+      smtp_host:     map.smtp_host     || '',
+      smtp_port:     map.smtp_port     || '587',
+      smtp_user:     map.smtp_user     || '',
+      smtp_password: map.smtp_password || '',
+      smtp_from:     map.smtp_from     || '',
+      smtp_use_tls:  map.smtp_use_tls  || 'true',
+    })
+    setGmail({
+      gmail_address:     map.gmail_address     || '',
+      gmail_app_password: map.gmail_app_password || '',
+    })
+  }, [settings])
+
+  const save = async () => {
+    setSaving(true)
     try {
-      await adminUpdateSetting(key, { value: edits[key] })
+      await adminUpdateSmtp({
+        smtp_provider: provider,
+        ...smtp,
+        ...gmail,
+      })
       queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
-      setEdits(e => { const n = { ...e }; delete n[key]; return n })
-      toast({ title: 'Setting saved', status: 'success', duration: 1500 })
+      toast({ title: 'Email settings saved', status: 'success', duration: 2000 })
     } catch {
       toast({ title: 'Save failed', status: 'error', duration: 2000 })
     } finally {
-      setSaving(s => ({ ...s, [key]: false }))
+      setSaving(false)
+    }
+  }
+
+  const testEmail = async () => {
+    setTesting(true)
+    try {
+      const res = await adminTestSmtp()
+      toast({ title: res.message, status: 'success', duration: 3000 })
+    } catch (err) {
+      toast({
+        title: 'Test failed',
+        description: err.response?.data?.detail || 'Check your settings',
+        status: 'error', duration: 4000,
+      })
+    } finally {
+      setTesting(false)
     }
   }
 
   if (isLoading) return <Center py={8}><Spinner color="brand.400" /></Center>
 
   return (
-    <VStack align="stretch" spacing={3} maxW="480px">
-      {settings?.map(s => (
-        <HStack key={s.key} justify="space-between" p={3} bg="gray.750"
-          borderRadius="lg" border="1px solid" borderColor="whiteAlpha.100">
-          <VStack align="start" spacing={0} flex={1}>
-            <Text fontSize="xs" color="gray.500" fontFamily="mono">{s.key}</Text>
+    <VStack align="stretch" spacing={5} maxW="500px">
+      <Text fontSize="sm" color="gray.400">
+        Configure outgoing email for alert notifications.
+      </Text>
+
+      {/* Provider toggle */}
+      <HStack spacing={3}>
+        {['smtp', 'gmail'].map(p => (
+          <Button
+            key={p}
+            size="sm"
+            variant={provider === p ? 'solid' : 'outline'}
+            colorScheme="brand"
+            onClick={() => setProvider(p)}
+            textTransform="uppercase"
+            letterSpacing="wide"
+            fontSize="xs"
+          >
+            {p === 'gmail' ? '📧 Gmail' : '🔧 SMTP'}
+          </Button>
+        ))}
+      </HStack>
+
+      {/* Gmail fields */}
+      {provider === 'gmail' && (
+        <VStack spacing={3} align="stretch">
+          <Box>
+            <Text fontSize="sm" color="gray.300" mb={1}>Gmail address</Text>
             <Input
-              size="sm" value={edits[s.key] ?? s.value}
-              onChange={e => setEdits(ed => ({ ...ed, [s.key]: e.target.value }))}
-              bg="transparent" border="none" p={0} h="auto"
-              fontSize="sm" color="white" fontFamily="mono"
-              _focus={{ boxShadow: 'none' }}
+              value={gmail.gmail_address}
+              onChange={e => setGmail(g => ({ ...g, gmail_address: e.target.value }))}
+              placeholder="your@gmail.com"
+              bg="gray.700" borderColor="whiteAlpha.200"
+              _focus={{ borderColor: 'brand.400', boxShadow: 'none' }}
             />
-          </VStack>
-          {edits[s.key] !== undefined && edits[s.key] !== s.value && (
-            <Button size="xs" colorScheme="brand" onClick={() => save(s.key)}
-              isLoading={saving[s.key]}>
-              Save
-            </Button>
-          )}
-        </HStack>
-      ))}
+          </Box>
+          <Box>
+            <Text fontSize="sm" color="gray.300" mb={1}>App password</Text>
+            <InputGroup>
+              <Input
+                value={gmail.gmail_app_password}
+                onChange={e => setGmail(g => ({ ...g, gmail_app_password: e.target.value }))}
+                type={showPw ? 'text' : 'password'}
+                placeholder="16-character app password"
+                bg="gray.700" borderColor="whiteAlpha.200"
+                _focus={{ borderColor: 'brand.400', boxShadow: 'none' }}
+              />
+              <InputRightElement>
+                <Button size="xs" variant="ghost" color="gray.400"
+                  onClick={() => setShowPw(s => !s)}>
+                  {showPw ? '🙈' : '👁️'}
+                </Button>
+              </InputRightElement>
+            </InputGroup>
+            <Text fontSize="xs" color="gray.500" mt={1}>
+              Generate at myaccount.google.com/apppasswords
+            </Text>
+          </Box>
+        </VStack>
+      )}
+
+      {/* SMTP fields */}
+      {provider === 'smtp' && (
+        <SimpleGrid columns={2} spacing={3}>
+          <Box gridColumn="span 2">
+            <Text fontSize="sm" color="gray.300" mb={1}>SMTP Host</Text>
+            <Input value={smtp.smtp_host}
+              onChange={e => setSmtp(s => ({ ...s, smtp_host: e.target.value }))}
+              placeholder="smtp.example.com" bg="gray.700" borderColor="whiteAlpha.200"
+              _focus={{ borderColor: 'brand.400', boxShadow: 'none' }} />
+          </Box>
+          <Box>
+            <Text fontSize="sm" color="gray.300" mb={1}>Port</Text>
+            <Input value={smtp.smtp_port}
+              onChange={e => setSmtp(s => ({ ...s, smtp_port: e.target.value }))}
+              placeholder="587" bg="gray.700" borderColor="whiteAlpha.200"
+              _focus={{ borderColor: 'brand.400', boxShadow: 'none' }} />
+          </Box>
+          <Box>
+            <Text fontSize="sm" color="gray.300" mb={1}>Use TLS</Text>
+            <Select value={smtp.smtp_use_tls}
+              onChange={e => setSmtp(s => ({ ...s, smtp_use_tls: e.target.value }))}
+              bg="gray.700" borderColor="whiteAlpha.200">
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </Select>
+          </Box>
+          <Box gridColumn="span 2">
+            <Text fontSize="sm" color="gray.300" mb={1}>Username</Text>
+            <Input value={smtp.smtp_user}
+              onChange={e => setSmtp(s => ({ ...s, smtp_user: e.target.value }))}
+              placeholder="your@email.com" bg="gray.700" borderColor="whiteAlpha.200"
+              _focus={{ borderColor: 'brand.400', boxShadow: 'none' }} />
+          </Box>
+          <Box gridColumn="span 2">
+            <Text fontSize="sm" color="gray.300" mb={1}>Password</Text>
+            <InputGroup>
+              <Input value={smtp.smtp_password}
+                onChange={e => setSmtp(s => ({ ...s, smtp_password: e.target.value }))}
+                type={showPw ? 'text' : 'password'} placeholder="Password"
+                bg="gray.700" borderColor="whiteAlpha.200"
+                _focus={{ borderColor: 'brand.400', boxShadow: 'none' }} />
+              <InputRightElement>
+                <Button size="xs" variant="ghost" color="gray.400"
+                  onClick={() => setShowPw(s => !s)}>
+                  {showPw ? '🙈' : '👁️'}
+                </Button>
+              </InputRightElement>
+            </InputGroup>
+          </Box>
+          <Box gridColumn="span 2">
+            <Text fontSize="sm" color="gray.300" mb={1}>From address</Text>
+            <Input value={smtp.smtp_from}
+              onChange={e => setSmtp(s => ({ ...s, smtp_from: e.target.value }))}
+              placeholder="TerraWatch <your@email.com>" bg="gray.700" borderColor="whiteAlpha.200"
+              _focus={{ borderColor: 'brand.400', boxShadow: 'none' }} />
+          </Box>
+        </SimpleGrid>
+      )}
+
+      <HStack spacing={3} pt={2}>
+        <Button colorScheme="brand" onClick={save} isLoading={saving}>
+          Save settings
+        </Button>
+        <Button variant="outline" colorScheme="brand" onClick={testEmail} isLoading={testing}>
+          Send test email
+        </Button>
+      </HStack>
     </VStack>
   )
 }

@@ -57,3 +57,6 @@ export const adminGetRegions    = () => api.get('/admin/alert-regions').then(r =
 export const adminGetSentAlerts = () => api.get('/admin/sent-alerts').then(r => r.data)
 export const adminGetSettings   = () => api.get('/admin/settings').then(r => r.data)
 export const adminUpdateSetting = (key, d) => api.patch(`/admin/settings/${key}`, d).then(r => r.data)
+
+export const adminUpdateSmtp    = d  => api.patch('/admin/settings/smtp', d).then(r => r.data)
+export const adminTestSmtp      = () => api.post('/admin/settings/smtp/test').then(r => r.data)

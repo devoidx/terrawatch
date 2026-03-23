@@ -5,28 +5,67 @@ import asyncio
 import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-# ── Email ────────────────────────────────────────────────────────────────────
+def get_smtp_config(db=None):
+    cfg = {
+        'provider':       'smtp',
+        'host':           os.getenv('SMTP_HOST', ''),
+        'port':           int(os.getenv('SMTP_PORT', '587')),
+        'user':           os.getenv('SMTP_USER', ''),
+        'password':       os.getenv('SMTP_PASSWORD', ''),
+        'from':           os.getenv('SMTP_FROM', ''),
+        'use_tls':        True,
+        'gmail_address':  os.getenv('GMAIL_ADDRESS', ''),
+        'gmail_password': os.getenv('GMAIL_APP_PASSWORD', ''),
+    }
+    if db:
+        try:
+            from models import Setting
+            s = {row.key: row.value for row in db.query(Setting).all()}
+            cfg['provider']       = s.get('smtp_provider', 'smtp')
+            cfg['host']           = s.get('smtp_host') or cfg['host']
+            cfg['port']           = int(s.get('smtp_port') or cfg['port'])
+            cfg['user']           = s.get('smtp_user') or cfg['user']
+            cfg['password']       = s.get('smtp_password') or cfg['password']
+            cfg['from']           = s.get('smtp_from') or cfg['from']
+            cfg['use_tls']        = (s.get('smtp_use_tls', 'true')).lower() == 'true'
+            cfg['gmail_address']  = s.get('gmail_address') or cfg['gmail_address']
+            cfg['gmail_password'] = s.get('gmail_app_password') or cfg['gmail_password']
+        except Exception:
+            pass
+    return cfg
 
-async def send_email(to_address: str, subject: str, body_html: str) -> bool:
-    host = os.getenv("SMTP_HOST", "")
-    port = int(os.getenv("SMTP_PORT", "587"))
-    user = os.getenv("SMTP_USER", "")
-    password = os.getenv("SMTP_PASSWORD", "")
-    from_addr = os.getenv("SMTP_FROM", user)
+
+async def send_email(to_address: str, subject: str, body_html: str, db=None) -> bool:
+    cfg = get_smtp_config(db)
+    provider = cfg['provider']
+
+    if provider == 'gmail':
+        host     = 'smtp.gmail.com'
+        port     = 587
+        user     = cfg['gmail_address']
+        password = cfg['gmail_password']
+        from_addr = f"TerraWatch <{user}>"
+        use_tls  = True
+    else:
+        host     = cfg['host']
+        port     = cfg['port']
+        user     = cfg['user']
+        password = cfg['password']
+        from_addr = cfg['from'] or user
+        use_tls  = cfg['use_tls']
 
     if not host or not user:
-        logger.warning("SMTP not configured, skipping email")
+        logger.warning("Email not configured, skipping")
         return False
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = from_addr
-    msg["To"] = to_address
+    msg["From"]    = from_addr
+    msg["To"]      = to_address
     msg.attach(MIMEText(body_html, "html"))
 
     try:
@@ -36,36 +75,13 @@ async def send_email(to_address: str, subject: str, body_html: str) -> bool:
             port=port,
             username=user,
             password=password,
-            start_tls=True,
+            start_tls=use_tls,
         )
-        logger.info(f"Email sent to {to_address}")
+        logger.info(f"Email sent to {to_address} via {provider}")
         return True
     except Exception as e:
         logger.error(f"Email failed: {e}")
         return False
-
-
-# ── SMS (Twilio) ──────────────────────────────────────────────────────────────
-
-def send_sms(to_number: str, message: str) -> bool:
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
-    from_number = os.getenv("TWILIO_FROM_NUMBER", "")
-
-    if not account_sid or not auth_token:
-        logger.warning("Twilio not configured, skipping SMS")
-        return False
-
-    try:
-        from twilio.rest import Client
-        client = Client(account_sid, auth_token)
-        client.messages.create(body=message, from_=from_number, to=to_number)
-        logger.info(f"SMS sent to {to_number}")
-        return True
-    except Exception as e:
-        logger.error(f"SMS failed: {e}")
-        return False
-
 
 # ── Web Push ──────────────────────────────────────────────────────────────────
 
