@@ -56,7 +56,7 @@ export default function TerraMap({
       center: [20, 0],
       zoom: 3,
       zoomControl: false,
-      minZoom: 2,
+      minZoom: 3,
       worldCopyJump: true,
     })
     L.control.zoom({ position: 'topright' }).addTo(mapObj.current)
@@ -65,7 +65,7 @@ export default function TerraMap({
       attribution: '© OpenStreetMap © CARTO',
       subdomains: 'abcd',
       maxZoom: 19,
-      minZoom: 2,
+      minZoom: 3,
     }).addTo(mapObj.current)
 
     eqLayer.current = L.layerGroup().addTo(mapObj.current)
