@@ -75,11 +75,12 @@ export default function MapControls({ filters, onChange, onRefresh, lastUpdated 
         </VStack>
 
         {/* Layer toggles */}
+        {/* Layer toggles */}
         <VStack spacing={1} align="stretch">
           <Text fontSize="xs" color="gray.500">Layers</Text>
           <HStack spacing={2}>
             <Button
-              size="xs"
+              size="sm"
               variant={filters.showEarthquakes ? 'solid' : 'outline'}
               colorScheme="blue"
               onClick={() => onChange({ showEarthquakes: !filters.showEarthquakes })}
@@ -88,7 +89,7 @@ export default function MapControls({ filters, onChange, onRefresh, lastUpdated 
               🌍 Quakes
             </Button>
             <Button
-              size="xs"
+              size="sm"
               variant={filters.showVolcanoes ? 'solid' : 'outline'}
               colorScheme="orange"
               onClick={() => onChange({ showVolcanoes: !filters.showVolcanoes })}
@@ -97,15 +98,26 @@ export default function MapControls({ filters, onChange, onRefresh, lastUpdated 
               🌋 Volcanoes
             </Button>
           </HStack>
-          <Button
-            size="xs"
-            variant={filters.showRegions ? 'solid' : 'outline'}
-            colorScheme="brand"
-            onClick={() => onChange({ showRegions: !filters.showRegions })}
-            w="100%"
-          >
-            📍 Alert Regions
-          </Button>
+          <HStack spacing={2}>
+            <Button
+              size="sm"
+              variant={filters.showRegions ? 'solid' : 'outline'}
+              colorScheme="brand"
+              onClick={() => onChange({ showRegions: !filters.showRegions })}
+              flex={1}
+            >
+              📍 Alert Regions
+            </Button>
+            <Button
+              size="sm"
+              variant={filters.elevatedOnly ? 'solid' : 'outline'}
+              colorScheme="yellow"
+              onClick={() => onChange({ elevatedOnly: !filters.elevatedOnly })}
+              flex={1}
+            >
+              {filters.elevatedOnly ? '⚠️ Elevated' : '🌋 All'}
+            </Button>
+          </HStack>
         </VStack>
 
         {/* Last updated */}

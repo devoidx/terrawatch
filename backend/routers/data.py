@@ -46,38 +46,64 @@ async def get_volcanoes(
     elevated_only: bool = Query(False),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Fetch volcano data from USGS HANS API."""
-    url = USGS_VOLCANO_ELEVATED if elevated_only else USGS_VOLCANO_MONITORED
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.get(url)
-            r.raise_for_status()
-            raw = r.json()
+            # Global volcano list with coordinates (worldwide)
+            r1 = await client.get(
+                "https://volcanoes.usgs.gov/vsc/api/volcanoApi/volcanoesGVP"
+            )
+            r1.raise_for_status()
 
-        # Normalise into a consistent shape regardless of USGS response format
-        volcanoes = []
-        for v in raw:
-            lat = v.get("latitude") or v.get("lat")
-            lng = v.get("longitude") or v.get("lon") or v.get("lng")
+            # Current US alert status
+            r2 = await client.get(
+                "https://volcanoes.usgs.gov/hans-public/api/volcano/getMonitoredVolcanoes"
+            )
+            r2.raise_for_status()
+
+        # Build alert status lookup keyed by vnum
+        alert_lookup = {}
+        for v in r2.json():
+            vnum = v.get("vnum")
+            if vnum:
+                alert_lookup[str(vnum)] = {
+                    "alert_level": (v.get("alert_level") or "NORMAL").lower(),
+                    "color_code":  (v.get("color_code")  or "GREEN").lower(),
+                }
+
+        results = []
+        for v in r1.json():
+            lat  = v.get("latitude")
+            lng  = v.get("longitude")
+            vnum = str(v.get("vnum") or "")
             if lat is None or lng is None:
                 continue
-            volcanoes.append({
-                "id": f"volcano-{v.get('vnum') or v.get('id', '')}",
-                "name": v.get("name", "Unknown"),
-                "lat": float(lat),
-                "lng": float(lng),
-                "alert_level": (v.get("alertLevel") or v.get("alert_level") or "normal").lower(),
-                "color_code": (v.get("colorCode") or v.get("color_code") or "green").lower(),
-                "location": v.get("location") or v.get("state") or "",
-                "vnum": v.get("vnum") or v.get("id"),
+
+            status = alert_lookup.get(vnum, {
+                "alert_level": "normal",
+                "color_code":  "green",
+            })
+            alert_level = status["alert_level"]
+
+            if elevated_only and alert_level == "normal":
+                continue
+
+            results.append({
+                "id":          f"volcano-{vnum}",
+                "name":        v.get("vName", "Unknown"),
+                "lat":         float(lat),
+                "lng":         float(lng),
+                "alert_level": alert_level,
+                "color_code":  status["color_code"],
+                "location":    f"{v.get('subregion', '')}, {v.get('country', '')}".strip(", "),
+                "vnum":        vnum,
+                "country":     v.get("country", ""),
             })
 
-        return {"volcanoes": volcanoes, "count": len(volcanoes)}
+        return {"volcanoes": results, "count": len(results)}
 
     except httpx.HTTPError as e:
-        logger.error(f"USGS volcano fetch error: {e}")
-        raise HTTPException(502, "Failed to fetch volcano data from USGS")
-
+        logger.error(f"Volcano fetch error: {e}")
+        raise HTTPException(502, "Failed to fetch volcano data from USGS") 
 
 @router.get("/earthquakes/stats")
 async def earthquake_stats(

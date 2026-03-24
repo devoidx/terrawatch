@@ -55,26 +55,40 @@ async def fetch_earthquakes() -> list[dict]:
 async def fetch_volcanoes() -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get(USGS_VOLCANO_URL)
-            r.raise_for_status()
-            data = r.json()
-            results = []
-            for v in data:
-                lat = v.get("latitude") or v.get("lat")
-                lng = v.get("longitude") or v.get("lon") or v.get("lng")
-                if lat is None or lng is None:
-                    continue
-                results.append({
-                    "id": f"volcano-{v.get('vnum') or v.get('id')}",
-                    "type": "volcano",
-                    "name": v.get("name", "Unknown Volcano"),
-                    "alert_level": (v.get("alertLevel") or v.get("alert_level") or "advisory").lower(),
-                    "color_code": v.get("colorCode") or v.get("color_code") or "yellow",
-                    "lat": float(lat),
-                    "lng": float(lng),
-                    "location": v.get("location") or v.get("state") or "",
-                })
-            return results
+            r1 = await client.get(
+                "https://volcanoes.usgs.gov/vsc/api/volcanoApi/volcanoesGVP"
+            )
+            r1.raise_for_status()
+            r2 = await client.get(
+                "https://volcanoes.usgs.gov/hans-public/api/volcano/getMonitoredVolcanoes"
+            )
+            r2.raise_for_status()
+
+        alert_lookup = {}
+        for v in r2.json():
+            vnum = v.get("vnum")
+            if vnum:
+                alert_lookup[str(vnum)] = (v.get("alert_level") or "NORMAL").lower()
+
+        results = []
+        for v in r1.json():
+            lat  = v.get("latitude")
+            lng  = v.get("longitude")
+            vnum = str(v.get("vnum") or "")
+            if lat is None or lng is None:
+                continue
+            alert_level = alert_lookup.get(vnum, "normal")
+            results.append({
+                "id":          f"volcano-{vnum}",
+                "type":        "volcano",
+                "name":        v.get("vName", "Unknown"),
+                "alert_level": alert_level,
+                "lat":         float(lat),
+                "lng":         float(lng),
+                "location":    f"{v.get('subregion', '')}, {v.get('country', '')}".strip(", "),
+                "country":     v.get("country", ""),
+            })
+        return results
     except Exception as e:
         logger.error(f"Volcano fetch failed: {e}")
         return []

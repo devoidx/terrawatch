@@ -7,22 +7,24 @@ import TerraMap from '../components/TerraMap'
 import EventSidebar from '../components/EventSidebar'
 import MapControls from '../components/MapControls'
 import AlertRegionModal from '../components/AlertRegionModal'
+import MapLegend from '../components/MapLegend'
 import { getEarthquakes, getVolcanoes, getEqStats, getAlertRegions } from '../api'
 
 const DEFAULT_FILTERS = {
-  hours:           24,
-  minMag:          2.5,
+  hours: 24,
+  minMag: 2.5,
   showEarthquakes: true,
-  showVolcanoes:   true,
-  showRegions:     true,
+  showVolcanoes: true,
+  showRegions: true,
+  elevatedOnly: true,
 }
 
 export default function Dashboard() {
   const toast = useToast()
   const { isOpen, onOpen, onClose } = useDisclosure()
 
-  const [filters, setFilters]       = useState(DEFAULT_FILTERS)
-  const [drawMode, setDrawMode]     = useState(false)
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [drawMode, setDrawMode] = useState(false)
   const [drawnBounds, setDrawnBounds] = useState(null)
   const [editRegion, setEditRegion] = useState(null)
 
@@ -31,25 +33,25 @@ export default function Dashboard() {
   // ── Data queries ───────────────────────────────────────────────────────────
   const eqQuery = useQuery({
     queryKey: ['earthquakes', filters.hours, filters.minMag],
-    queryFn:  () => getEarthquakes({ hours: filters.hours, min_magnitude: filters.minMag }),
+    queryFn: () => getEarthquakes({ hours: filters.hours, min_magnitude: filters.minMag }),
     refetchInterval: 120_000, // refresh every 2 min
   })
 
   const volcQuery = useQuery({
-    queryKey: ['volcanoes'],
-    queryFn:  () => getVolcanoes({ elevated_only: false }),
+    queryKey: ['volcanoes', filters.elevatedOnly],
+    queryFn: () => getVolcanoes({ elevated_only: filters.elevatedOnly }),
     refetchInterval: 300_000,
   })
 
   const statsQuery = useQuery({
     queryKey: ['eq-stats'],
-    queryFn:  getEqStats,
+    queryFn: getEqStats,
     refetchInterval: 120_000,
   })
 
   const regionsQuery = useQuery({
     queryKey: ['alert-regions'],
-    queryFn:  getAlertRegions,
+    queryFn: getAlertRegions,
   })
 
   // ── Draw handler ───────────────────────────────────────────────────────────
@@ -114,6 +116,7 @@ export default function Dashboard() {
             alertRegions={filters.showRegions ? (regionsQuery.data || []) : []}
             drawMode={drawMode}
             onRegionDrawn={handleRegionDrawn}
+            hoursWindow={filters.hours}
           />
 
           {/* Map controls overlay */}
@@ -123,6 +126,7 @@ export default function Dashboard() {
             onRefresh={handleRefresh}
             lastUpdated={eqQuery.dataUpdatedAt}
           />
+          <MapLegend />
 
           {/* Draw region button */}
           <Box position="absolute" bottom={4} left={4} zIndex={450}>
