@@ -159,42 +159,48 @@ export default function TerraMap({
       const timeStr = new Date(time).toLocaleString()
       const opacity = eventOpacity(time, hoursWindow)
       const recent = isRecent(time)
+      const color = magColor(mag)
+      const radius = magRadius(mag)
+      const size = radius * 2
 
-      // Pulse ring for very recent events
       if (recent) {
-        L.circleMarker([lat, lng], {
-          radius: magRadius(mag) + 8,
-          fillColor: 'transparent',
-          color: magColor(mag),
-          weight: 2,
-          opacity: 0.6,
-          fillOpacity: 0,
-          className: 'eq-pulse-ring',
-        }).addTo(eqLayer.current)
+        const pulseSize = size + 20
+        const pulseIcon = L.divIcon({
+          className: '',
+          html: `<div style="width:${pulseSize}px;height:${pulseSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+          <div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${color};animation:eq-pulse 2s ease-out infinite;transform-origin:center center;"></div>
+        </div>`,
+          iconSize: [pulseSize, pulseSize],
+          iconAnchor: [pulseSize / 2, pulseSize / 2],
+        })
+        L.marker([lat, lng], { icon: pulseIcon, interactive: false, zIndexOffset: -100 })
+          .addTo(eqLayer.current)
       }
 
-      L.circleMarker([lat, lng], {
-        radius: magRadius(mag),
-        fillColor: magColor(mag),
-        color: 'rgba(0,0,0,0.4)',
-        weight: 1,
-        opacity: 1,
-        fillOpacity: opacity,
-      }).bindPopup(`
-    <div style="font-family:sans-serif;min-width:200px">
-      <div style="font-weight:700;font-size:15px;margin-bottom:4px">
-        M${mag.toFixed(1)} Earthquake
-        ${recent ? '<span style="color:#48bb78;font-size:11px;margin-left:6px">● RECENT</span>' : ''}
-      </div>
-      <div style="color:#718096;font-size:13px;margin-bottom:6px">${place}</div>
-      <div style="font-size:12px;color:#718096">${timeStr}</div>
-      ${f.properties.url ? `<a href="${f.properties.url}" target="_blank"
-        style="font-size:12px;color:#4299e1;display:block;margin-top:6px">
-        View on USGS →</a>` : ''}
-    </div>
-  `).addTo(eqLayer.current)
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};opacity:${opacity};border:1.5px solid rgba(0,0,0,0.5);box-sizing:border-box;"></div>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+      })
+
+      L.marker([lat, lng], { icon })
+        .bindPopup(`
+        <div style="font-family:sans-serif;min-width:200px">
+          <div style="font-weight:700;font-size:15px;margin-bottom:4px">
+            M${mag.toFixed(1)} Earthquake
+            ${recent ? '<span style="color:#48bb78;font-size:11px;margin-left:6px">● RECENT</span>' : ''}
+          </div>
+          <div style="color:#718096;font-size:13px;margin-bottom:6px">${place}</div>
+          <div style="font-size:12px;color:#718096">${timeStr}</div>
+          ${f.properties.url ? `<a href="${f.properties.url}" target="_blank"
+            style="font-size:12px;color:#4299e1;display:block;margin-top:6px">
+            View on USGS →</a>` : ''}
+        </div>
+      `)
+        .addTo(eqLayer.current)
     })
-  }, [earthquakes])
+  }, [earthquakes, hoursWindow])
 
   // ── Volcanoes ──────────────────────────────────────────────────────────────
   useEffect(() => {
