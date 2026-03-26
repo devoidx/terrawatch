@@ -5,7 +5,7 @@ import {
 } from '@chakra-ui/react'
 import OverlayManager from './OverlayManager'
 
-export default function MapControls({ filters, onChange, onRefresh, onReset, lastUpdated, map }) {
+export default function MapControls({ filters, onChange, onRefresh, onReset, lastUpdated, map, earthquakeData }) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -146,7 +146,7 @@ export default function MapControls({ filters, onChange, onRefresh, onReset, las
           </VStack>
 
           {/* Overlays */}
-          <OverlayManager map={map} />
+          <OverlayManager map={map} earthquakeData={earthquakeData} />
 
           {lastUpdated && (
             <Text fontSize="2xs" color="gray.600" textAlign="right">

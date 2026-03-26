@@ -168,6 +168,7 @@ export default function Dashboard() {
             onReset={handleReset}
             lastUpdated={eqQuery.dataUpdatedAt}
             map={mapInstanceRef.current}
+            earthquakeData={eqQuery.data}
           />
           <MapLegend />
 
