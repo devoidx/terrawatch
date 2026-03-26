@@ -167,6 +167,7 @@ export default function Dashboard() {
             onRefresh={handleRefresh}
             onReset={handleReset}
             lastUpdated={eqQuery.dataUpdatedAt}
+            map={mapInstanceRef.current}
           />
           <MapLegend />
 

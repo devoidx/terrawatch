@@ -52,3 +52,17 @@ body,
   animation: pulse-ring 1.8s ease-out infinite;
   background: currentColor;
 }
+
+.plate-tooltip {
+  background: rgba(17, 24, 39, 0.9);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  color: #e2e8f0;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.plate-tooltip::before {
+  display: none;
+}

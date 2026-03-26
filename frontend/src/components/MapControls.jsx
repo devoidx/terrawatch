@@ -3,8 +3,9 @@ import {
   Box, VStack, HStack, Text, Select, Slider, SliderTrack,
   SliderFilledTrack, SliderThumb, Badge, Tooltip, Button, IconButton,
 } from '@chakra-ui/react'
+import OverlayManager from './OverlayManager'
 
-export default function MapControls({ filters, onChange, onRefresh, onReset, lastUpdated }) {
+export default function MapControls({ filters, onChange, onRefresh, onReset, lastUpdated, map }) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -143,6 +144,9 @@ export default function MapControls({ filters, onChange, onRefresh, onReset, las
               </Button>
             </HStack>
           </VStack>
+
+          {/* Overlays */}
+          <OverlayManager map={map} />
 
           {lastUpdated && (
             <Text fontSize="2xs" color="gray.600" textAlign="right">
