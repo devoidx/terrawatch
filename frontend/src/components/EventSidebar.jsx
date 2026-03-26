@@ -1,6 +1,6 @@
 import {
   Box, VStack, HStack, Text, Badge, Divider, Spinner,
-  Center, Tabs, TabList, Tab, TabPanels, TabPanel, Icon
+  Center, Tabs, TabList, Tab, TabPanels, TabPanel,
 } from '@chakra-ui/react'
 
 const MAG_COLOR = (mag) => {
@@ -22,7 +22,7 @@ function TimeAgo({ timestamp }) {
   return <Text as="span" fontSize="xs" color="gray.500">{Math.floor(hrs/24)}d ago</Text>
 }
 
-function EqItem({ feature }) {
+function EqItem({ feature, onSelect }) {
   const mag   = feature.properties.mag || 0
   const place = feature.properties.place || 'Unknown location'
   const time  = feature.properties.time
@@ -30,10 +30,10 @@ function EqItem({ feature }) {
   return (
     <Box
       px={3} py={2.5}
-      _hover={{ bg: 'whiteAlpha.50' }}
-      cursor="pointer"
+      _hover={{ bg: 'whiteAlpha.100', cursor: 'pointer' }}
       borderRadius="md"
       transition="background 0.15s"
+      onClick={() => onSelect(feature)}
     >
       <HStack justify="space-between" align="flex-start">
         <HStack align="flex-start" spacing={2.5} flex={1}>
@@ -57,18 +57,24 @@ function EqItem({ feature }) {
   )
 }
 
-function VolcItem({ volcano }) {
+function VolcItem({ volcano, onSelect }) {
   return (
     <Box
       px={3} py={2.5}
-      _hover={{ bg: 'whiteAlpha.50' }}
-      cursor="pointer"
+      _hover={{ bg: 'whiteAlpha.100', cursor: 'pointer' }}
       borderRadius="md"
       transition="background 0.15s"
+      onClick={() => onSelect(volcano)}
     >
       <HStack justify="space-between" align="flex-start">
         <HStack align="flex-start" spacing={2.5} flex={1}>
-          <Text fontSize="md" mt="-1px">🌋</Text>
+          <svg width="12" height="11" viewBox="0 0 20 18" style={{ flexShrink: 0, marginTop: 2 }}>
+            <polygon points="10,1 19,17 1,17"
+              fill={volcano.alert_level === 'warning' ? '#f56565' :
+                    volcano.alert_level === 'watch'   ? '#ed8936' :
+                    volcano.alert_level === 'advisory' ? '#ecc94b' : '#48bb78'}
+              stroke="rgba(0,0,0,0.4)" strokeWidth="1.5" />
+          </svg>
           <VStack align="start" spacing={0} flex={1}>
             <Text fontSize="xs" color="gray.200" fontWeight="600" noOfLines={1}>
               {volcano.name}
@@ -93,10 +99,13 @@ function VolcItem({ volcano }) {
   )
 }
 
-export default function EventSidebar({ earthquakes, volcanoes, eqLoading, volcLoading, stats }) {
-  const eqFeatures   = earthquakes?.features || []
-  const volcList     = volcanoes?.volcanoes   || []
-  const elevated     = volcList.filter(v => v.alert_level !== 'normal')
+export default function EventSidebar({
+  earthquakes, volcanoes, eqLoading, volcLoading, stats,
+  onEarthquakeSelect, onVolcanoSelect,
+}) {
+  const eqFeatures = earthquakes?.features || []
+  const volcList   = volcanoes?.volcanoes   || []
+  const elevated   = volcList.filter(v => v.alert_level !== 'normal')
 
   return (
     <Box
@@ -129,51 +138,63 @@ export default function EventSidebar({ earthquakes, volcanoes, eqLoading, volcLo
         </HStack>
       )}
 
-      <Tabs variant="line" colorScheme="brand" flex={1} display="flex" flexDir="column">
-        <TabList borderColor="whiteAlpha.100" px={3}>
-          <Tab fontSize="xs" fontWeight="600" color="gray.400" _selected={{ color: 'brand.300', borderColor: 'brand.300' }}>
+      <Tabs variant="line" colorScheme="brand" flex={1} display="flex" flexDir="column" overflow="hidden">
+        <TabList borderColor="whiteAlpha.100" px={3} flexShrink={0}>
+          <Tab fontSize="xs" fontWeight="600" color="gray.400"
+            _selected={{ color: 'brand.300', borderColor: 'brand.300' }}>
             Earthquakes ({eqFeatures.length})
           </Tab>
-          <Tab fontSize="xs" fontWeight="600" color="gray.400" _selected={{ color: 'brand.300', borderColor: 'brand.300' }}>
-            Volcanoes ({elevated.length} active)
+          <Tab fontSize="xs" fontWeight="600" color="gray.400"
+            _selected={{ color: 'brand.300', borderColor: 'brand.300' }}>
+            Volcanoes ({elevated.length})
           </Tab>
         </TabList>
 
         <TabPanels flex={1} overflow="hidden">
-          <TabPanel p={0} h="100%" overflow="auto">
+          {/* Earthquakes — scrollable */}
+          <TabPanel p={0} h="100%" overflowY="auto">
             {eqLoading ? (
               <Center py={8}><Spinner size="sm" color="brand.400" /></Center>
             ) : eqFeatures.length === 0 ? (
-              <Center py={8}><Text fontSize="sm" color="gray.500">No earthquakes found</Text></Center>
+              <Center py={8}>
+                <Text fontSize="sm" color="gray.500">No earthquakes found</Text>
+              </Center>
             ) : (
               <VStack spacing={0} align="stretch" py={1}>
-                {eqFeatures.map(f => <EqItem key={f.id} feature={f} />)}
+                {eqFeatures.map(f => (
+                  <EqItem
+                    key={f.id}
+                    feature={f}
+                    onSelect={onEarthquakeSelect}
+                  />
+                ))}
               </VStack>
             )}
           </TabPanel>
 
-          <TabPanel p={0} h="100%" overflow="auto">
+          {/* Volcanoes — elevated only, scrollable */}
+          <TabPanel p={0} h="100%" overflowY="auto">
             {volcLoading ? (
               <Center py={8}><Spinner size="sm" color="brand.400" /></Center>
+            ) : elevated.length === 0 ? (
+              <Center py={8}>
+                <Text fontSize="sm" color="gray.500">No elevated volcanoes</Text>
+              </Center>
             ) : (
               <VStack spacing={0} align="stretch" py={1}>
-                {elevated.length > 0 && (
-                  <>
-                    <Text px={3} pt={2} pb={1} fontSize="2xs" fontWeight="700"
-                      color="orange.400" textTransform="uppercase" letterSpacing="wider">
-                      Elevated Alert
-                    </Text>
-                    {elevated.map(v => <VolcItem key={v.id} volcano={v} />)}
-                    <Divider borderColor="whiteAlpha.100" my={1} />
-                  </>
-                )}
-                <Text px={3} pt={2} pb={1} fontSize="2xs" fontWeight="700"
-                  color="gray.500" textTransform="uppercase" letterSpacing="wider">
-                  All Monitored ({volcList.length})
-                </Text>
-                {volcList.filter(v => v.alert_level === 'normal').map(v => (
-                  <VolcItem key={v.id} volcano={v} />
-                ))}
+                {elevated
+                  .sort((a, b) => {
+                    const order = { warning: 0, watch: 1, advisory: 2 }
+                    return (order[a.alert_level] ?? 3) - (order[b.alert_level] ?? 3)
+                  })
+                  .map(v => (
+                    <VolcItem
+                      key={v.id}
+                      volcano={v}
+                      onSelect={onVolcanoSelect}
+                    />
+                  ))
+                }
               </VStack>
             )}
           </TabPanel>

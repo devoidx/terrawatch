@@ -8,6 +8,7 @@ import EventSidebar from '../components/EventSidebar'
 import MapControls from '../components/MapControls'
 import AlertRegionModal from '../components/AlertRegionModal'
 import MapLegend from '../components/MapLegend'
+import L from 'leaflet'
 import { getEarthquakes, getVolcanoes, getEqStats, getAlertRegions } from '../api'
 
 const DEFAULT_FILTERS = {
@@ -27,8 +28,10 @@ export default function Dashboard() {
   const [drawMode, setDrawMode] = useState(false)
   const [drawnBounds, setDrawnBounds] = useState(null)
   const [editRegion, setEditRegion] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const updateFilter = (patch) => setFilters(f => ({ ...f, ...patch }))
+  const mapInstanceRef = useRef(null)
 
   // ── Data queries ───────────────────────────────────────────────────────────
   const eqQuery = useQuery({
@@ -86,6 +89,45 @@ export default function Dashboard() {
     toast({ title: 'Data refreshed', status: 'success', duration: 1500, isClosable: true })
   }
 
+  const handleReset = useCallback(() => {
+    const map = mapInstanceRef.current
+    if (map) map.flyTo([20, 0], 3, { duration: 1.2 })
+  }, [])
+
+  const handleMapReady = useCallback((mapInstance) => {
+    mapInstanceRef.current = mapInstance
+  }, [])
+
+  const handleEarthquakeSelect = useCallback((feature) => {
+    const [lng, lat] = feature.geometry.coordinates
+    const map = mapInstanceRef.current
+    if (!map) return
+    map.flyTo([lat, lng], 7, { duration: 1.2 })
+    // Flash a highlight ring at the location
+    const mag = feature.properties.mag || 0
+    const color = mag >= 7 ? '#9b2c2c' : mag >= 6 ? '#f56565' :
+      mag >= 5 ? '#ed8936' : mag >= 4 ? '#ecc94b' : '#48bb78'
+    const ring = L.circleMarker([lat, lng], {
+      radius: 30, fillColor: 'transparent',
+      color, weight: 3, opacity: 1,
+    }).addTo(map)
+    setTimeout(() => map.removeLayer(ring), 2500)
+  }, [])
+
+  const handleVolcanoSelect = useCallback((volcano) => {
+    const map = mapInstanceRef.current
+    if (!map) return
+    map.flyTo([volcano.lat, volcano.lng], 7, { duration: 1.2 })
+    const color = volcano.alert_level === 'warning' ? '#f56565' :
+      volcano.alert_level === 'watch' ? '#ed8936' :
+        volcano.alert_level === 'advisory' ? '#ecc94b' : '#48bb78'
+    const ring = L.circleMarker([volcano.lat, volcano.lng], {
+      radius: 30, fillColor: 'transparent',
+      color, weight: 3, opacity: 1,
+    }).addTo(map)
+    setTimeout(() => map.removeLayer(ring), 2500)
+  }, [])
+
   return (
     <Box h="calc(100vh - 57px)" display="flex" flexDir="column" overflow="hidden">
       {/* Draw mode banner */}
@@ -117,18 +159,18 @@ export default function Dashboard() {
             drawMode={drawMode}
             onRegionDrawn={handleRegionDrawn}
             hoursWindow={filters.hours}
+            onMapReady={handleMapReady}
           />
-
-          {/* Map controls overlay */}
           <MapControls
             filters={filters}
             onChange={updateFilter}
             onRefresh={handleRefresh}
+            onReset={handleReset}
             lastUpdated={eqQuery.dataUpdatedAt}
           />
           <MapLegend />
 
-          {/* Draw region button */}
+          {/* Draw region button - bottom left */}
           <Box position="absolute" bottom={4} left={4} zIndex={450}>
             <Button
               size="sm"
@@ -143,14 +185,13 @@ export default function Dashboard() {
             </Button>
           </Box>
 
-          {/* Live indicator */}
+          {/* Live indicator - bottom right */}
           <Box position="absolute" bottom={4} right={4} zIndex={450}>
             <HStack
               bg="gray.900" border="1px solid" borderColor="whiteAlpha.200"
               borderRadius="full" px={3} py={1.5} spacing={2}
             >
-              <Box w="7px" h="7px" borderRadius="full" bg="green.400"
-                animation="pulse-ring 1.8s ease-out infinite" position="relative" />
+              <Box w="7px" h="7px" borderRadius="full" bg="green.400" />
               <Text fontSize="xs" color="gray.400" fontFamily="mono">LIVE</Text>
               <Badge colorScheme="blue" variant="subtle" fontSize="2xs">
                 {eqQuery.data?.features?.length ?? '—'} quakes
@@ -162,14 +203,48 @@ export default function Dashboard() {
           </Box>
         </Box>
 
+        {/* Sidebar toggle tab — sits between map and sidebar */}
+        <Box
+          position="relative"
+          zIndex={450}
+          display="flex"
+          alignItems="center"
+        >
+          <Box
+            as="button"
+            onClick={() => setSidebarOpen(o => !o)}
+            bg="gray.800"
+            border="1px solid"
+            borderColor="whiteAlpha.200"
+            borderRight="none"
+            borderRadius="md 0 0 md"
+            px={1}
+            py={4}
+            color="gray.400"
+            fontSize="xs"
+            cursor="pointer"
+            _hover={{ bg: 'gray.700', color: 'white' }}
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            h="60px"
+          >
+            {sidebarOpen ? '›' : '‹'}
+          </Box>
+        </Box>
+
         {/* Sidebar */}
-        <EventSidebar
-          earthquakes={eqQuery.data}
-          volcanoes={volcQuery.data}
-          eqLoading={eqQuery.isLoading}
-          volcLoading={volcQuery.isLoading}
-          stats={statsQuery.data}
-        />
+        {sidebarOpen && (
+          <EventSidebar
+            earthquakes={eqQuery.data}
+            volcanoes={volcQuery.data}
+            eqLoading={eqQuery.isLoading}
+            volcLoading={volcQuery.isLoading}
+            stats={statsQuery.data}
+            onEarthquakeSelect={handleEarthquakeSelect}
+            onVolcanoSelect={handleVolcanoSelect}
+          />
+        )}
       </HStack>
 
       {/* Alert region modal */}

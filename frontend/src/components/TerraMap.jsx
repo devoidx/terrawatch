@@ -36,7 +36,7 @@ function isRecent(timestamp) {
 }
 
 export default function TerraMap({
-  earthquakes, volcanoes, alertRegions = [], drawMode = false, onRegionDrawn, hoursWindow = 24,
+  earthquakes, volcanoes, alertRegions = [], drawMode = false, onRegionDrawn, hoursWindow = 24, onMapReady,
 }) {
   const mapRef = useRef(null)
   const mapObj = useRef(null)
@@ -71,6 +71,8 @@ export default function TerraMap({
     eqLayer.current = L.layerGroup().addTo(mapObj.current)
     volcLayer.current = L.layerGroup().addTo(mapObj.current)
     regionLayer.current = L.featureGroup().addTo(mapObj.current)
+
+    onMapReady?.(mapObj.current)
 
     return () => { mapObj.current?.remove(); mapObj.current = null }
   }, [])
