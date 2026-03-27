@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Box } from '@chakra-ui/react'
-import L from 'leaflet'
+//import L from 'leaflet'
+
+const L = window.L
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -10,7 +12,10 @@ L.Icon.Default.mergeOptions({
 })
 
 const VOLCANO_COLORS = {
-  normal: '#48bb78', advisory: '#ecc94b', watch: '#ed8936', warning: '#f56565',
+  normal: '#48bb78',
+  advisory: '#ecc94b',
+  watch: '#ed8936',
+  warning: '#f56565',
 }
 
 function magColor(mag) {
@@ -27,24 +32,59 @@ function eventOpacity(timestamp, hoursWindow) {
   const ageMs = Date.now() - timestamp
   const windowMs = hoursWindow * 60 * 60 * 1000
   const ratio = Math.max(0, Math.min(1, 1 - ageMs / windowMs))
-  // Clamp between 0.15 (oldest) and 0.9 (newest)
   return 0.15 + ratio * 0.75
 }
 
 function isRecent(timestamp) {
-  return Date.now() - timestamp < 30 * 60 * 1000 // last 30 minutes
+  return Date.now() - timestamp < 30 * 60 * 1000
+}
+
+function createEqLayer(cluster) {
+  const WL = window.L
+  if (cluster && WL?.markerClusterGroup) {
+    return WL.markerClusterGroup({
+      maxClusterRadius: 60,
+      disableClusteringAtZoom: 6,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      iconCreateFunction: (cl) => {
+        const count = cl.getChildCount()
+        const bg = count < 10 ? '#0967d2' : count < 50 ? '#ed8936' : '#f56565'
+        return L.divIcon({
+          html: `<div style="
+            width:40px;height:40px;border-radius:50%;
+            background:${bg}cc;
+            border:3px solid white;
+            display:flex;align-items:center;justify-content:center;
+            color:white;font-weight:700;font-size:13px;
+            font-family:'DM Sans',sans-serif;
+            box-shadow:0 0 0 2px ${bg}, 0 2px 8px rgba(0,0,0,0.5);">
+            ${count}
+          </div>`,
+          className: '',
+          iconSize: [40, 40],
+          iconAnchor: [20, 20],
+        })
+      },
+    })
+  }
+  return L.layerGroup()
 }
 
 export default function TerraMap({
-  earthquakes, volcanoes, alertRegions = [], drawMode = false, onRegionDrawn, hoursWindow = 24, onMapReady,
+  earthquakes, volcanoes, alertRegions = [],
+  drawMode = false, onRegionDrawn,
+  hoursWindow = 24, onMapReady,
+  clusterMarkers = true,
 }) {
   const mapRef = useRef(null)
   const mapObj = useRef(null)
   const eqLayer = useRef(null)
   const volcLayer = useRef(null)
   const regionLayer = useRef(null)
-  const onRegionDrawnRef = useRef(onRegionDrawn)
   const drawState = useRef({ active: false, startLatLng: null, rect: null })
+  const onRegionDrawnRef = useRef(onRegionDrawn)
 
   useEffect(() => { onRegionDrawnRef.current = onRegionDrawn }, [onRegionDrawn])
 
@@ -59,6 +99,7 @@ export default function TerraMap({
       minZoom: 3,
       worldCopyJump: true,
     })
+
     L.control.zoom({ position: 'topright' }).addTo(mapObj.current)
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -68,7 +109,8 @@ export default function TerraMap({
       minZoom: 3,
     }).addTo(mapObj.current)
 
-    eqLayer.current = L.layerGroup().addTo(mapObj.current)
+    eqLayer.current = createEqLayer(true)
+    eqLayer.current.addTo(mapObj.current)
     volcLayer.current = L.layerGroup().addTo(mapObj.current)
     regionLayer.current = L.featureGroup().addTo(mapObj.current)
 
@@ -77,11 +119,10 @@ export default function TerraMap({
     return () => { mapObj.current?.remove(); mapObj.current = null }
   }, [])
 
-  // ── Custom draw mode using mouse events ────────────────────────────────────
+  // ── Draw mode ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const map = mapObj.current
     if (!map) return
-
     const state = drawState.current
 
     if (drawMode) {
@@ -101,8 +142,11 @@ export default function TerraMap({
           state.rect.setBounds(bounds)
         } else {
           state.rect = L.rectangle(bounds, {
-            color: '#0967d2', weight: 2,
-            fillColor: '#0967d2', fillOpacity: 0.15, dashArray: '6 4',
+            color: '#0967d2',
+            weight: 2,
+            fillColor: '#0967d2',
+            fillOpacity: 0.15,
+            dashArray: '6 4',
           }).addTo(map)
         }
       }
@@ -114,7 +158,6 @@ export default function TerraMap({
         const sw = bounds.getSouthWest()
         const ne = bounds.getNorthEast()
 
-        // Ignore tiny clicks
         if (Math.abs(ne.lat - sw.lat) < 0.5 || Math.abs(ne.lng - sw.lng) < 0.5) {
           if (state.rect) { map.removeLayer(state.rect); state.rect = null }
           state.startLatLng = null
@@ -150,8 +193,23 @@ export default function TerraMap({
 
   // ── Earthquakes ────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!eqLayer.current) return
-    eqLayer.current.clearLayers()
+    if (!mapObj.current) return
+
+    // Nuclear option — remove everything from the map that isn't a tile,
+    // volcano, or region layer, then rebuild
+    if (eqLayer.current) {
+      eqLayer.current.clearLayers()
+      mapObj.current.removeLayer(eqLayer.current)
+      eqLayer.current = null
+    }
+
+    const layer = createEqLayer(clusterMarkers)
+
+    console.log('createEqLayer called with clusterMarkers =', clusterMarkers, '→', layer.constructor?.name)
+
+    mapObj.current.addLayer(layer)
+    eqLayer.current = layer
+
     const features = earthquakes?.features || []
     features.forEach(f => {
       const [lng, lat] = f.geometry.coordinates
@@ -169,9 +227,7 @@ export default function TerraMap({
         const pulseSize = size + 20
         const pulseIcon = L.divIcon({
           className: '',
-          html: `<div style="width:${pulseSize}px;height:${pulseSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;">
-          <div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${color};animation:eq-pulse 2s ease-out infinite;transform-origin:center center;"></div>
-        </div>`,
+          html: `<div style="width:${pulseSize}px;height:${pulseSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;"><div style="width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${color};animation:eq-pulse 2s ease-out infinite;transform-origin:center center;"></div></div>`,
           iconSize: [pulseSize, pulseSize],
           iconAnchor: [pulseSize / 2, pulseSize / 2],
         })
@@ -195,14 +251,12 @@ export default function TerraMap({
           </div>
           <div style="color:#718096;font-size:13px;margin-bottom:6px">${place}</div>
           <div style="font-size:12px;color:#718096">${timeStr}</div>
-          ${f.properties.url ? `<a href="${f.properties.url}" target="_blank"
-            style="font-size:12px;color:#4299e1;display:block;margin-top:6px">
-            View on USGS →</a>` : ''}
+          ${f.properties.url ? `<a href="${f.properties.url}" target="_blank" style="font-size:12px;color:#4299e1;display:block;margin-top:6px">View on USGS →</a>` : ''}
         </div>
       `)
         .addTo(eqLayer.current)
     })
-  }, [earthquakes, hoursWindow])
+  }, [earthquakes, hoursWindow, clusterMarkers])
 
   // ── Volcanoes ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -213,28 +267,36 @@ export default function TerraMap({
       const color = VOLCANO_COLORS[v.alert_level] || VOLCANO_COLORS.normal
       const icon = L.divIcon({
         className: '',
-        html: `<svg width="20" height="18" viewBox="0 0 20 18" xmlns="http://www.w3.org/2000/svg"
-    style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8))">
-    <polygon points="10,1 19,17 1,17"
-      fill="${color}"
-      stroke="rgba(0,0,0,0.5)"
-      stroke-width="1.5"
-      stroke-linejoin="round"
-    />
-  </svg>`,
+        html: `<svg width="20" height="18" viewBox="0 0 20 18"
+          xmlns="http://www.w3.org/2000/svg"
+          style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8))">
+          <polygon points="10,1 19,17 1,17"
+            fill="${color}"
+            stroke="rgba(0,0,0,0.5)"
+            stroke-width="1.5"
+            stroke-linejoin="round"/>
+        </svg>`,
         iconSize: [20, 18],
         iconAnchor: [10, 9],
       })
-      L.marker([v.lat, v.lng], { icon }).bindPopup(`
-        <div style="font-family:sans-serif;min-width:180px">
-          <div style="font-weight:700;font-size:15px;margin-bottom:4px">🌋 ${v.name}</div>
-          <span style="background:${color}22;color:${color};border:1px solid ${color}55;
-            padding:2px 8px;border-radius:99px;font-size:12px;font-weight:600;
-            text-transform:uppercase">${v.alert_level}</span>
-          ${v.location ? `<div style="color:#718096;font-size:12px;margin-top:4px">
-            ${v.location}</div>` : ''}
-        </div>
-      `).addTo(volcLayer.current)
+      L.marker([v.lat, v.lng], { icon })
+        .bindPopup(`
+          <div style="font-family:sans-serif;min-width:180px">
+            <div style="font-weight:700;font-size:15px;margin-bottom:4px">
+              🌋 ${v.name}
+            </div>
+            <span style="
+              background:${color}22;color:${color};
+              border:1px solid ${color}55;
+              padding:2px 8px;border-radius:99px;
+              font-size:12px;font-weight:600;text-transform:uppercase">
+              ${v.alert_level}
+            </span>
+            ${v.location ? `<div style="color:#718096;font-size:12px;margin-top:4px">
+              ${v.location}</div>` : ''}
+          </div>
+        `)
+        .addTo(volcLayer.current)
     })
   }, [volcanoes])
 
@@ -244,9 +306,13 @@ export default function TerraMap({
     regionLayer.current.clearLayers()
     alertRegions.forEach(r => {
       L.rectangle([[r.lat_min, r.lng_min], [r.lat_max, r.lng_max]], {
-        color: '#0967d2', weight: 2,
-        fillColor: '#0967d2', fillOpacity: 0.1, dashArray: '6 4',
-      }).bindTooltip(r.name, { permanent: false, direction: 'center' })
+        color: '#0967d2',
+        weight: 2,
+        fillColor: '#0967d2',
+        fillOpacity: 0.1,
+        dashArray: '6 4',
+      })
+        .bindTooltip(r.name, { permanent: false, direction: 'center' })
         .addTo(regionLayer.current)
     })
   }, [alertRegions])

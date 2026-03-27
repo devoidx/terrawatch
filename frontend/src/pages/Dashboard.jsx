@@ -8,8 +8,10 @@ import EventSidebar from '../components/EventSidebar'
 import MapControls from '../components/MapControls'
 import AlertRegionModal from '../components/AlertRegionModal'
 import MapLegend from '../components/MapLegend'
-import L from 'leaflet'
 import { getEarthquakes, getVolcanoes, getEqStats, getAlertRegions } from '../api'
+//import L from 'leaflet'
+
+const L = window.L
 
 const DEFAULT_FILTERS = {
   hours: 24,
@@ -160,6 +162,7 @@ export default function Dashboard() {
             onRegionDrawn={handleRegionDrawn}
             hoursWindow={filters.hours}
             onMapReady={handleMapReady}
+            clusterMarkers={filters.clusterMarkers}
           />
           <MapControls
             filters={filters}

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { VStack, HStack, Text, Button, Spinner } from '@chakra-ui/react'
-import L from 'leaflet'
+import { VStack, Text, Button, Spinner } from '@chakra-ui/react'
 import { OVERLAYS } from './overlays/index'
 
 export default function OverlayManager({ map, earthquakeData }) {
@@ -10,6 +9,8 @@ export default function OverlayManager({ map, earthquakeData }) {
 
   // When earthquake data updates, refresh any active data-driven overlays
   useEffect(() => {
+    const L = window.L
+    if (!L) return
     OVERLAYS.forEach(overlay => {
       if (active[overlay.id] && overlay.update) {
         overlay.update(earthquakeData, L)
@@ -18,7 +19,8 @@ export default function OverlayManager({ map, earthquakeData }) {
   }, [earthquakeData, active])
 
   const toggle = async (overlay) => {
-    if (!map) return
+    const L = window.L
+    if (!map || !L) return
     const { id } = overlay
 
     if (active[id]) {

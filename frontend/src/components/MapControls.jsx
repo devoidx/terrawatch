@@ -59,6 +59,7 @@ export default function MapControls({ filters, onChange, onRefresh, onReset, las
       {/* Content */}
       {!collapsed && (
         <VStack spacing={3} align="stretch" px={3} pb={3}>
+
           {/* Time range */}
           <VStack spacing={1} align="stretch">
             <Text fontSize="xs" color="gray.500">Time range</Text>
@@ -143,6 +144,15 @@ export default function MapControls({ filters, onChange, onRefresh, onReset, las
                 {filters.elevatedOnly ? '⚠️ Elevated' : '🌋 All'}
               </Button>
             </HStack>
+            <Button
+              size="sm"
+              variant={filters.clusterMarkers ? 'solid' : 'outline'}
+              colorScheme="brand"
+              onClick={() => onChange({ clusterMarkers: !filters.clusterMarkers })}
+              w="100%"
+            >
+              {filters.clusterMarkers ? '⬤ Clustering ON' : '○ Clustering OFF'}
+            </Button>
           </VStack>
 
           {/* Overlays */}

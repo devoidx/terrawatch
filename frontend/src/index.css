@@ -26,6 +26,39 @@ body,
   z-index: 402 !important;
 }
 
+/* Marker cluster styling */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+  background-color: rgba(9, 103, 210, 0.3) !important;
+}
+
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div {
+  background-color: rgba(9, 103, 210, 0.7) !important;
+  color: white !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  font-family: 'DM Sans', sans-serif !important;
+}
+
+.marker-cluster-medium {
+  background-color: rgba(237, 137, 54, 0.3) !important;
+}
+
+.marker-cluster-medium div {
+  background-color: rgba(237, 137, 54, 0.7) !important;
+}
+
+.marker-cluster-large {
+  background-color: rgba(245, 101, 101, 0.3) !important;
+}
+
+.marker-cluster-large div {
+  background-color: rgba(245, 101, 101, 0.7) !important;
+}
+
 /* Earthquake marker pulse animation */
 @keyframes eq-pulse {
   0% {
