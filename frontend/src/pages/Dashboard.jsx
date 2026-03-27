@@ -19,6 +19,8 @@ const DEFAULT_FILTERS = {
   showVolcanoes: true,
   showRegions: true,
   elevatedOnly: true,
+  clusterMarkers: true,
+  depthMode: false,
 }
 
 export default function Dashboard() {
@@ -162,6 +164,7 @@ export default function Dashboard() {
             hoursWindow={filters.hours}
             onMapReady={handleMapReady}
             clusterMarkers={filters.clusterMarkers}
+            depthMode={filters.depthMode}
           />
           <MapControls
             filters={filters}

@@ -11,20 +11,20 @@ const EQ_SCALE = [
   { label: 'M4.0–4.9', color: '#ecc94b', desc: 'Light' },
   { label: 'M5.0–5.9', color: '#ed8936', desc: 'Moderate' },
   { label: 'M6.0–6.9', color: '#f56565', desc: 'Strong' },
-  { label: 'M7.0+',    color: '#9b2c2c', desc: 'Major' },
+  { label: 'M7.0+', color: '#9b2c2c', desc: 'Major' },
 ]
 
 const VOLC_SCALE = [
-  { label: 'Normal',   color: '#48bb78' },
+  { label: 'Normal', color: '#48bb78' },
   { label: 'Advisory', color: '#ecc94b' },
-  { label: 'Watch',    color: '#ed8936' },
-  { label: 'Warning',  color: '#f56565' },
+  { label: 'Watch', color: '#ed8936' },
+  { label: 'Warning', color: '#f56565' },
 ]
 
 export default function MapControls({
   filters, onChange, onRefresh, onReset, lastUpdated, map, earthquakeData
 }) {
-  const [collapsed, setCollapsed]           = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const [legendExpanded, setLegendExpanded] = useState(false)
 
   return (
@@ -172,6 +172,13 @@ export default function MapControls({
                 w="100%">
                 {filters.clusterMarkers ? '⬤ Clustering ON' : '○ Clustering OFF'}
               </Button>
+              <Button size="sm"
+                variant={filters.depthMode ? 'solid' : 'outline'}
+                colorScheme="purple"
+                onClick={() => onChange({ depthMode: !filters.depthMode })}
+                w="100%">
+                {filters.depthMode ? '🎨 Colour: Depth' : '🎨 Colour: Magnitude'}
+              </Button>
             </VStack>
 
             {/* Overlays */}
@@ -201,16 +208,38 @@ export default function MapControls({
                 <VStack spacing={2} align="stretch" pt={2}>
                   <Text fontSize="2xs" fontWeight="700" color="gray.400"
                     textTransform="uppercase" letterSpacing="wider">
-                    Earthquakes
+                    Earthquakes — {filters.depthMode ? 'by depth' : 'by magnitude'}
                   </Text>
-                  {EQ_SCALE.map(({ label, color, desc }) => (
-                    <HStack key={label} spacing={2}>
-                      <Box w="10px" h="10px" borderRadius="full"
-                        flexShrink={0} bg={color} opacity={0.85} />
-                      <Text fontSize="2xs" color="gray.300" fontFamily="mono">{label}</Text>
-                      <Text fontSize="2xs" color="gray.500">{desc}</Text>
-                    </HStack>
-                  ))}
+
+                  {filters.depthMode ? (
+                    <>
+                      {[
+                        { label: '0–10 km', color: '#ff4444', desc: 'Very shallow' },
+                        { label: '11–35 km', color: '#ff8c00', desc: 'Shallow' },
+                        { label: '36–70 km', color: '#ffd700', desc: 'Intermediate' },
+                        { label: '71–150 km', color: '#00bcd4', desc: 'Deep' },
+                        { label: '150+ km', color: '#7c3aed', desc: 'Very deep' },
+                      ].map(({ label, color, desc }) => (
+                        <HStack key={label} spacing={2}>
+                          <Box w="10px" h="10px" borderRadius="full"
+                            flexShrink={0} bg={color} opacity={0.85} />
+                          <Text fontSize="2xs" color="gray.300" fontFamily="mono">{label}</Text>
+                          <Text fontSize="2xs" color="gray.500">{desc}</Text>
+                        </HStack>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      {EQ_SCALE.map(({ label, color, desc }) => (
+                        <HStack key={label} spacing={2}>
+                          <Box w="10px" h="10px" borderRadius="full"
+                            flexShrink={0} bg={color} opacity={0.85} />
+                          <Text fontSize="2xs" color="gray.300" fontFamily="mono">{label}</Text>
+                          <Text fontSize="2xs" color="gray.500">{desc}</Text>
+                        </HStack>
+                      ))}
+                    </>
+                  )}
 
                   <Divider borderColor="whiteAlpha.100" mt={1} />
 

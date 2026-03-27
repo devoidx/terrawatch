@@ -26,6 +26,22 @@ function magColor(mag) {
   return '#48bb78'
 }
 
+function depthColor(depth) {
+  if (depth <= 10) return '#ff4444'  // very shallow — red
+  if (depth <= 35) return '#ff8c00'  // shallow — orange
+  if (depth <= 70) return '#ffd700'  // intermediate — yellow
+  if (depth <= 150) return '#00bcd4'  // deep — cyan
+  return '#7c3aed'                    // very deep — purple
+}
+
+function depthLabel(depth) {
+  if (depth <= 10) return 'Very shallow'
+  if (depth <= 35) return 'Shallow'
+  if (depth <= 70) return 'Intermediate'
+  if (depth <= 150) return 'Deep'
+  return 'Very deep'
+}
+
 function magRadius(mag) { return Math.max(5, mag * 3.5) }
 
 function eventOpacity(timestamp, hoursWindow) {
@@ -77,6 +93,7 @@ export default function TerraMap({
   drawMode = false, onRegionDrawn,
   hoursWindow = 24, onMapReady,
   clusterMarkers = true,
+  depthMode = false,
 }) {
   const mapRef = useRef(null)
   const mapObj = useRef(null)
@@ -210,14 +227,17 @@ export default function TerraMap({
 
     const features = earthquakes?.features || []
     features.forEach(f => {
-      const [lng, lat] = f.geometry.coordinates
+      const [lng, lat, depth] = f.geometry.coordinates
       const mag = f.properties.mag || 0
       const place = f.properties.place || 'Unknown'
       const time = f.properties.time
       const timeStr = new Date(time).toLocaleString()
       const opacity = eventOpacity(time, hoursWindow)
       const recent = isRecent(time)
-      const color = magColor(mag)
+      const depthKm = Math.round(depth || 0)
+
+      // Colour by depth if depthMode, otherwise colour by magnitude
+      const color = depthMode ? depthColor(depthKm) : magColor(mag)
       const radius = magRadius(mag)
       const size = radius * 2
 
@@ -242,19 +262,25 @@ export default function TerraMap({
 
       L.marker([lat, lng], { icon })
         .bindPopup(`
-        <div style="font-family:sans-serif;min-width:200px">
-          <div style="font-weight:700;font-size:15px;margin-bottom:4px">
-            M${mag.toFixed(1)} Earthquake
-            ${recent ? '<span style="color:#48bb78;font-size:11px;margin-left:6px">● RECENT</span>' : ''}
-          </div>
-          <div style="color:#718096;font-size:13px;margin-bottom:6px">${place}</div>
-          <div style="font-size:12px;color:#718096">${timeStr}</div>
-          ${f.properties.url ? `<a href="${f.properties.url}" target="_blank" style="font-size:12px;color:#4299e1;display:block;margin-top:6px">View on USGS →</a>` : ''}
-        </div>
-      `)
+  <div style="font-family:sans-serif;min-width:200px">
+    <div style="font-weight:700;font-size:15px;margin-bottom:4px">
+      M${mag.toFixed(1)} Earthquake
+      ${recent ? '<span style="color:#48bb78;font-size:11px;margin-left:6px">● RECENT</span>' : ''}
+    </div>
+    <div style="color:#718096;font-size:13px;margin-bottom:4px">${place}</div>
+    <div style="font-size:12px;color:#718096;margin-bottom:2px">
+      Depth: <span style="color:#e2e8f0;font-weight:600">${depthKm} km</span>
+      — ${depthLabel(depthKm)}
+    </div>
+    <div style="font-size:12px;color:#718096">${timeStr}</div>
+    ${f.properties.url ? `<a href="${f.properties.url}" target="_blank"
+      style="font-size:12px;color:#4299e1;display:block;margin-top:6px">
+      View on USGS →</a>` : ''}
+  </div>
+`)
         .addTo(eqLayer.current)
     })
-  }, [earthquakes, hoursWindow, clusterMarkers])
+  }, [earthquakes, hoursWindow, clusterMarkers, depthMode])
 
   // ── Volcanoes ──────────────────────────────────────────────────────────────
   useEffect(() => {
