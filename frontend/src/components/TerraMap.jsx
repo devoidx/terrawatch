@@ -205,8 +205,6 @@ export default function TerraMap({
 
     const layer = createEqLayer(clusterMarkers)
 
-    console.log('createEqLayer called with clusterMarkers =', clusterMarkers, '→', layer.constructor?.name)
-
     mapObj.current.addLayer(layer)
     eqLayer.current = layer
 

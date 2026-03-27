@@ -7,7 +7,6 @@ import TerraMap from '../components/TerraMap'
 import EventSidebar from '../components/EventSidebar'
 import MapControls from '../components/MapControls'
 import AlertRegionModal from '../components/AlertRegionModal'
-import MapLegend from '../components/MapLegend'
 import { getEarthquakes, getVolcanoes, getEqStats, getAlertRegions } from '../api'
 //import L from 'leaflet'
 
@@ -173,7 +172,6 @@ export default function Dashboard() {
             map={mapInstanceRef.current}
             earthquakeData={eqQuery.data}
           />
-          <MapLegend />
 
           {/* Draw region button - bottom left */}
           <Box position="absolute" bottom={4} left={4} zIndex={450}>
