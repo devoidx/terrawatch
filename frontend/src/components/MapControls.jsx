@@ -7,6 +7,7 @@ import {
 import OverlayManager from './OverlayManager'
 
 const EQ_SCALE = [
+  { label: 'M1.0–2.4', color: '#a0aec0', desc: 'Micro' },
   { label: 'M2.5–3.9', color: '#48bb78', desc: 'Minor' },
   { label: 'M4.0–4.9', color: '#ecc94b', desc: 'Light' },
   { label: 'M5.0–5.9', color: '#ed8936', desc: 'Moderate' },
@@ -118,7 +119,7 @@ export default function MapControls({
                 </Badge>
               </HStack>
               <Slider
-                min={2.5} max={7} step={0.5}
+                min={1.0} max={7} step={0.5}
                 value={filters.minMag}
                 onChange={v => onChange({ minMag: v })}
                 colorScheme="brand"
@@ -128,6 +129,11 @@ export default function MapControls({
                   <SliderThumb boxSize={4} bg="brand.400" />
                 </Tooltip>
               </Slider>
+              {filters.minMag < 2.5 && (
+                <Text fontSize="2xs" color="orange.400">
+                  ⚠️ Below M2.5 only shows events near well-monitored networks (US, Japan etc.)
+                </Text>
+              )}
             </VStack>
 
             {/* Layer toggles */}

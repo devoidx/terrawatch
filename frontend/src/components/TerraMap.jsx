@@ -23,7 +23,8 @@ function magColor(mag) {
   if (mag >= 6) return '#f56565'
   if (mag >= 5) return '#ed8936'
   if (mag >= 4) return '#ecc94b'
-  return '#48bb78'
+  if (mag >= 2.5) return '#48bb78'
+  return '#a0aec0'  // micro — grey
 }
 
 function depthColor(depth) {
