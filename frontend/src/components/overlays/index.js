@@ -1,12 +1,15 @@
-import { TectonicPlatesOverlay } from './TectonicPlates'
+import { TectonicPlatesOverlay }   from './TectonicPlates'
 import { EarthquakeHeatmapOverlay } from './EarthquakeHeatmap'
 import { TsunamiWarningsOverlay }  from './TsunamiWarnings'
 import { DartBuoysOverlay }        from './DartBuoys'
+import { ActiveFaultsOverlay }     from './ActiveFaults'
+import { SeismicHazardUSOverlay }  from './SeismicHazardUS'
 
-// Add future overlays here — they just need id, label, icon, color, and a load(map, L) function
 export const OVERLAYS = [
   TectonicPlatesOverlay,
   EarthquakeHeatmapOverlay,
   TsunamiWarningsOverlay,
   DartBuoysOverlay,
+  ActiveFaultsOverlay,
+  SeismicHazardUSOverlay,
 ]

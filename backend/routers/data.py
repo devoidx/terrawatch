@@ -233,3 +233,41 @@ async def earthquake_stats(
     except httpx.HTTPError as e:
         logger.error(f"Stats fetch error: {e}")
         raise HTTPException(502, "Failed to fetch stats from USGS")
+    
+@router.get("/active-faults")
+async def get_active_faults(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Fetch GEM Global Active Faults GeoJSON, simplified for web display."""
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.get(
+                "https://raw.githubusercontent.com/GEMScienceTools/gem-global-active-faults/master/geojson/gem_active_faults_harmonized.geojson"
+            )
+            r.raise_for_status()
+
+        data = r.json()
+
+        # Strip heavy properties, keep only what we need for display
+        simplified_features = []
+        for f in data.get("features", []):
+            props = f.get("properties", {})
+            simplified_features.append({
+                "type": "Feature",
+                "geometry": f.get("geometry"),
+                "properties": {
+                    "name":       props.get("name", ""),
+                    "slip_type":  props.get("slip_type", ""),
+                    "slip_rate":  props.get("slip_rate_preferred", ""),
+                    "country":    props.get("country", ""),
+                }
+            })
+
+        return {
+            "type":     "FeatureCollection",
+            "features": simplified_features,
+        }
+
+    except httpx.HTTPError as e:
+        logger.error(f"Active faults fetch error: {e}")
+        raise HTTPException(502, "Failed to fetch active faults data")
