@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { VStack, Text, Button, Spinner } from '@chakra-ui/react'
+import { VStack, Text, Button } from '@chakra-ui/react'
 import { OVERLAYS } from './overlays/index'
 
-export default function OverlayManager({ map, earthquakeData }) {
+export default function OverlayManager({ map, earthquakeData, onActiveChange }) {
   const [active, setActive]   = useState({})
   const [loading, setLoading] = useState({})
   const layerRefs             = useRef({})
 
-  // When earthquake data updates, refresh any active data-driven overlays
+  useEffect(() => {
+    onActiveChange?.(active)
+  }, [active])
+
   useEffect(() => {
     const L = window.L
     if (!L) return

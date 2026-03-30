@@ -22,11 +22,29 @@ const VOLC_SCALE = [
   { label: 'Warning', color: '#f56565' },
 ]
 
+const FAULT_TYPES = [
+  { label: 'Reverse / Thrust', color: '#f87171' },
+  { label: 'Normal', color: '#60a5fa' },
+  { label: 'Strike-Slip', color: '#fb923c' },
+  { label: 'Sinistral', color: '#a78bfa' },
+  { label: 'Oblique', color: '#34d399' },
+  { label: 'Unknown', color: '#94a3b8' },
+]
+
+const HAZARD_SCALE = [
+  { label: 'Very High (>1.6g)', color: '#7f0000' },
+  { label: 'High (0.8–1.6g)', color: '#d73027' },
+  { label: 'Moderate (0.4–0.8g)', color: '#fc8d59' },
+  { label: 'Low (0.2–0.4g)', color: '#fee090' },
+  { label: 'Very Low (<0.2g)', color: '#e0f3f8' },
+]
+
 export default function MapControls({
   filters, onChange, onRefresh, onReset, lastUpdated, map, earthquakeData
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [legendExpanded, setLegendExpanded] = useState(false)
+  const [activeOverlays, setActiveOverlays] = useState({})
 
   return (
     <Box
@@ -265,6 +283,44 @@ export default function MapControls({
                   ))}
 
                   <Divider borderColor="whiteAlpha.100" mt={1} />
+
+                  {/* Active Faults legend */}
+                  {activeOverlays.active_faults && (
+                    <>
+                      <Divider borderColor="whiteAlpha.100" mt={1} />
+                      <Text fontSize="2xs" fontWeight="700" color="gray.400"
+                        textTransform="uppercase" letterSpacing="wider">
+                        Active Faults
+                      </Text>
+                      {FAULT_TYPES.map(({ label, color }) => (
+                        <HStack key={label} spacing={2}>
+                          <Box w="16px" h="3px" bg={color} flexShrink={0} borderRadius="1px" />
+                          <Text fontSize="2xs" color="gray.300">{label}</Text>
+                        </HStack>
+                      ))}
+                    </>
+                  )}
+
+                  {/* USGS Seismic Hazard legend */}
+                  {activeOverlays.seismic_hazard_us && (
+                    <>
+                      <Divider borderColor="whiteAlpha.100" mt={1} />
+                      <Text fontSize="2xs" fontWeight="700" color="gray.400"
+                        textTransform="uppercase" letterSpacing="wider">
+                        Seismic Hazard (US) — PGA
+                      </Text>
+                      {HAZARD_SCALE.map(({ label, color }) => (
+                        <HStack key={label} spacing={2}>
+                          <Box w="10px" h="10px" flexShrink={0} bg={color}
+                            border="1px solid" borderColor="whiteAlpha.200" />
+                          <Text fontSize="2xs" color="gray.300">{label}</Text>
+                        </HStack>
+                      ))}
+                      <Text fontSize="2xs" color="gray.500" mt={1}>
+                        10% exceedance in 50 years
+                      </Text>
+                    </>
+                  )}
 
                   <HStack spacing={2}>
                     <Box w="10px" h="10px" borderRadius="full"
