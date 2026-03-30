@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Box, VStack, HStack, Text, Select, Slider, SliderTrack,
   SliderFilledTrack, SliderThumb, Badge, Tooltip, Button,
@@ -12,39 +12,51 @@ const EQ_SCALE = [
   { label: 'M4.0–4.9', color: '#ecc94b', desc: 'Light' },
   { label: 'M5.0–5.9', color: '#ed8936', desc: 'Moderate' },
   { label: 'M6.0–6.9', color: '#f56565', desc: 'Strong' },
-  { label: 'M7.0+', color: '#9b2c2c', desc: 'Major' },
+  { label: 'M7.0+',    color: '#9b2c2c', desc: 'Major' },
+]
+
+const DEPTH_SCALE = [
+  { label: '0–10 km',   color: '#ff4444', desc: 'Very shallow' },
+  { label: '11–35 km',  color: '#ff8c00', desc: 'Shallow' },
+  { label: '36–70 km',  color: '#ffd700', desc: 'Intermediate' },
+  { label: '71–150 km', color: '#00bcd4', desc: 'Deep' },
+  { label: '150+ km',   color: '#7c3aed', desc: 'Very deep' },
 ]
 
 const VOLC_SCALE = [
-  { label: 'Normal', color: '#48bb78' },
+  { label: 'Normal',   color: '#48bb78' },
   { label: 'Advisory', color: '#ecc94b' },
-  { label: 'Watch', color: '#ed8936' },
-  { label: 'Warning', color: '#f56565' },
+  { label: 'Watch',    color: '#ed8936' },
+  { label: 'Warning',  color: '#f56565' },
 ]
 
 const FAULT_TYPES = [
   { label: 'Reverse / Thrust', color: '#f87171' },
-  { label: 'Normal', color: '#60a5fa' },
-  { label: 'Strike-Slip', color: '#fb923c' },
-  { label: 'Sinistral', color: '#a78bfa' },
-  { label: 'Oblique', color: '#34d399' },
-  { label: 'Unknown', color: '#94a3b8' },
+  { label: 'Normal',           color: '#60a5fa' },
+  { label: 'Strike-Slip',      color: '#fb923c' },
+  { label: 'Sinistral',        color: '#a78bfa' },
+  { label: 'Oblique',          color: '#34d399' },
+  { label: 'Unknown',          color: '#94a3b8' },
 ]
 
 const HAZARD_SCALE = [
-  { label: 'Very High (>1.6g)', color: '#7f0000' },
-  { label: 'High (0.8–1.6g)', color: '#d73027' },
+  { label: 'Very High (>1.6g)',    color: '#7f0000' },
+  { label: 'High (0.8–1.6g)',      color: '#d73027' },
   { label: 'Moderate (0.4–0.8g)', color: '#fc8d59' },
-  { label: 'Low (0.2–0.4g)', color: '#fee090' },
-  { label: 'Very Low (<0.2g)', color: '#e0f3f8' },
+  { label: 'Low (0.2–0.4g)',      color: '#fee090' },
+  { label: 'Very Low (<0.2g)',    color: '#e0f3f8' },
 ]
 
 export default function MapControls({
   filters, onChange, onRefresh, onReset, lastUpdated, map, earthquakeData
 }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed]           = useState(false)
   const [legendExpanded, setLegendExpanded] = useState(false)
   const [activeOverlays, setActiveOverlays] = useState({})
+
+  const handleActiveChange = useCallback((active) => {
+    setActiveOverlays({ ...active })
+  }, [])
 
   return (
     <Box
@@ -149,7 +161,7 @@ export default function MapControls({
               </Slider>
               {filters.minMag < 2.5 && (
                 <Text fontSize="2xs" color="orange.400">
-                  ⚠️ Below M2.5 only shows events near well-monitored networks (US, Japan etc.)
+                  ⚠️ Below M2.5 only shows events near well-monitored networks
                 </Text>
               )}
             </VStack>
@@ -206,7 +218,11 @@ export default function MapControls({
             </VStack>
 
             {/* Overlays */}
-            <OverlayManager map={map} earthquakeData={earthquakeData} />
+            <OverlayManager
+              map={map}
+              earthquakeData={earthquakeData}
+              onActiveChange={handleActiveChange}
+            />
 
             <Divider borderColor="whiteAlpha.100" />
 
@@ -230,43 +246,24 @@ export default function MapControls({
 
               {legendExpanded && (
                 <VStack spacing={2} align="stretch" pt={2}>
+
+                  {/* Earthquakes */}
                   <Text fontSize="2xs" fontWeight="700" color="gray.400"
                     textTransform="uppercase" letterSpacing="wider">
                     Earthquakes — {filters.depthMode ? 'by depth' : 'by magnitude'}
                   </Text>
-
-                  {filters.depthMode ? (
-                    <>
-                      {[
-                        { label: '0–10 km', color: '#ff4444', desc: 'Very shallow' },
-                        { label: '11–35 km', color: '#ff8c00', desc: 'Shallow' },
-                        { label: '36–70 km', color: '#ffd700', desc: 'Intermediate' },
-                        { label: '71–150 km', color: '#00bcd4', desc: 'Deep' },
-                        { label: '150+ km', color: '#7c3aed', desc: 'Very deep' },
-                      ].map(({ label, color, desc }) => (
-                        <HStack key={label} spacing={2}>
-                          <Box w="10px" h="10px" borderRadius="full"
-                            flexShrink={0} bg={color} opacity={0.85} />
-                          <Text fontSize="2xs" color="gray.300" fontFamily="mono">{label}</Text>
-                          <Text fontSize="2xs" color="gray.500">{desc}</Text>
-                        </HStack>
-                      ))}
-                    </>
-                  ) : (
-                    <>
-                      {EQ_SCALE.map(({ label, color, desc }) => (
-                        <HStack key={label} spacing={2}>
-                          <Box w="10px" h="10px" borderRadius="full"
-                            flexShrink={0} bg={color} opacity={0.85} />
-                          <Text fontSize="2xs" color="gray.300" fontFamily="mono">{label}</Text>
-                          <Text fontSize="2xs" color="gray.500">{desc}</Text>
-                        </HStack>
-                      ))}
-                    </>
-                  )}
+                  {(filters.depthMode ? DEPTH_SCALE : EQ_SCALE).map(({ label, color, desc }) => (
+                    <HStack key={label} spacing={2}>
+                      <Box w="10px" h="10px" borderRadius="full"
+                        flexShrink={0} bg={color} opacity={0.85} />
+                      <Text fontSize="2xs" color="gray.300" fontFamily="mono">{label}</Text>
+                      {desc && <Text fontSize="2xs" color="gray.500">{desc}</Text>}
+                    </HStack>
+                  ))}
 
                   <Divider borderColor="whiteAlpha.100" mt={1} />
 
+                  {/* Volcanoes */}
                   <Text fontSize="2xs" fontWeight="700" color="gray.400"
                     textTransform="uppercase" letterSpacing="wider">
                     Volcanoes
@@ -284,6 +281,15 @@ export default function MapControls({
 
                   <Divider borderColor="whiteAlpha.100" mt={1} />
 
+                  <HStack spacing={2}>
+                    <Box w="10px" h="10px" borderRadius="full"
+                      border="2px solid" borderColor="green.400" flexShrink={0} />
+                    <Text fontSize="2xs" color="gray.400">Pulse = last 30 min</Text>
+                  </HStack>
+                  <Text fontSize="2xs" color="gray.500" pl="14px">
+                    Fade = older events
+                  </Text>
+
                   {/* Active Faults legend */}
                   {activeOverlays.active_faults && (
                     <>
@@ -294,7 +300,8 @@ export default function MapControls({
                       </Text>
                       {FAULT_TYPES.map(({ label, color }) => (
                         <HStack key={label} spacing={2}>
-                          <Box w="16px" h="3px" bg={color} flexShrink={0} borderRadius="1px" />
+                          <Box w="16px" h="3px" bg={color}
+                            flexShrink={0} borderRadius="1px" />
                           <Text fontSize="2xs" color="gray.300">{label}</Text>
                         </HStack>
                       ))}
@@ -322,14 +329,6 @@ export default function MapControls({
                     </>
                   )}
 
-                  <HStack spacing={2}>
-                    <Box w="10px" h="10px" borderRadius="full"
-                      border="2px solid" borderColor="green.400" flexShrink={0} />
-                    <Text fontSize="2xs" color="gray.400">Pulse = last 30 min</Text>
-                  </HStack>
-                  <Text fontSize="2xs" color="gray.500" pl="14px">
-                    Fade = older events
-                  </Text>
                 </VStack>
               )}
             </VStack>
