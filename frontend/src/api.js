@@ -48,6 +48,7 @@ export const getVolcanoes   = (params) =>
   api.get('/data/volcanoes', { params }).then(r => r.data)
 export const getEqStats     = () =>
   api.get('/data/earthquakes/stats').then(r => r.data)
+export const getDartBuoys = () => api.get('/data/dart-buoys').then(r => r.data)
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const adminGetUsers      = () => api.get('/admin/users').then(r => r.data)

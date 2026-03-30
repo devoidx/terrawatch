@@ -104,6 +104,53 @@ async def get_volcanoes(
     except httpx.HTTPError as e:
         logger.error(f"Volcano fetch error: {e}")
         raise HTTPException(502, "Failed to fetch volcano data from USGS") 
+    
+@router.get("/dart-buoys")
+async def get_dart_buoys(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Fetch and parse NOAA DART buoy station list."""
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(
+                "https://www.ndbc.noaa.gov/data/stations/station_table.txt"
+            )
+            r.raise_for_status()
+
+        stations = []
+        for line in r.text.split('\n'):
+            if not line.strip() or line.startswith('#'):
+                continue
+            if 'dart' not in line.lower():
+                continue
+
+            # Parse coordinates: "30.487 N 152.124 E"
+            import re
+            coord = re.search(
+                r'(-?\d+\.?\d*)\s+([NS])\s+(-?\d+\.?\d*)\s+([EW])', line
+            )
+            if not coord:
+                continue
+
+            lat = float(coord.group(1)) * (-1 if coord.group(2) == 'S' else 1)
+            lng = float(coord.group(3)) * (-1 if coord.group(4) == 'W' else 1)
+            parts = line.split('|')
+            sid  = parts[0].strip() if parts else ''
+            name = parts[4].strip()[:60] if len(parts) > 4 else 'DART Buoy'
+
+            if sid and not (lat == 0 and lng == 0):
+                stations.append({
+                    'id':   sid,
+                    'name': name,
+                    'lat':  lat,
+                    'lng':  lng,
+                })
+
+        return {'stations': stations, 'count': len(stations)}
+
+    except httpx.HTTPError as e:
+        logger.error(f"DART buoy fetch error: {e}")
+        raise HTTPException(502, "Failed to fetch DART buoy data from NOAA")
 
 @router.get("/earthquakes/stats")
 async def earthquake_stats(
