@@ -151,6 +151,51 @@ async def get_dart_buoys(
     except httpx.HTTPError as e:
         logger.error(f"DART buoy fetch error: {e}")
         raise HTTPException(502, "Failed to fetch DART buoy data from NOAA")
+    
+@router.get("/dart-buoy/{station_id}")
+async def get_dart_buoy_detail(
+    station_id: str,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Fetch water column height readings for a DART buoy — last 24 hours."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                f"https://www.ndbc.noaa.gov/data/realtime2/{station_id}.dart"
+            )
+            if r.status_code == 404:
+                return {"station_id": station_id, "status": "no_data", "readings": []}
+            r.raise_for_status()
+
+        readings = []
+        lines = [l for l in r.text.split('\n') if l.strip() and not l.startswith('#')]
+
+        for line in lines[:96]:  # 96 x 15min = 24 hours
+            parts = line.split()
+            if len(parts) < 8:
+                continue
+            try:
+                yr, mo, dy, hr, mn = parts[0], parts[1], parts[2], parts[3], parts[4]
+                height = float(parts[7])
+                readings.append({
+                    "time":   f"{yr}-{mo}-{dy} {hr}:{mn} UTC",
+                    "height": height,
+                })
+            except (ValueError, IndexError):
+                continue
+
+        if not readings:
+            return {"station_id": station_id, "status": "no_data", "readings": []}
+
+        return {
+            "station_id": station_id,
+            "status":     "ok",
+            "readings":   readings,  # newest first
+        }
+
+    except Exception as e:
+        logger.error(f"DART buoy detail error for {station_id}: {e}")
+        return {"station_id": station_id, "status": "error", "readings": []}
 
 @router.get("/earthquakes/stats")
 async def earthquake_stats(

@@ -10,6 +10,8 @@ export const TsunamiWarningsOverlay = {
   icon:  '🌊',
   color: '#3b82f6',
 
+  _noAlertMarker: null,
+
   async load(map, L) {
     const res = await fetch(
       'https://api.weather.gov/alerts/active?event=Tsunami%20Warning,Tsunami%20Watch,Tsunami%20Advisory'
@@ -19,22 +21,8 @@ export const TsunamiWarningsOverlay = {
     const group = L.layerGroup()
 
     if (features.length === 0) {
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="
-          background:rgba(59,130,246,0.15);
-          border:1.5px solid #3b82f6;
-          border-radius:8px;
-          padding:4px 8px;
-          color:#93c5fd;
-          font-size:11px;
-          font-family:sans-serif;
-          white-space:nowrap;
-          font-weight:600;
-        ">🌊 No active tsunami alerts</div>`,
-        iconAnchor: [110, 10],
-      })
-      L.marker([20, -160], { icon, interactive: false }).addTo(group)
+      // No active alerts — overlay is active but empty, which is correct
+      // Button label will show it's on, user knows no alerts = good news
     } else {
       features.forEach(f => {
         const event    = f.properties?.event || 'Tsunami Warning'
