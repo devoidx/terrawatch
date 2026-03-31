@@ -4,16 +4,22 @@ import httpx
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 import auth, models
 
 logger = logging.getLogger(__name__)
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 USGS_EQ_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
 USGS_VOLCANO_ELEVATED = "https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes"
 USGS_VOLCANO_MONITORED = "https://volcanoes.usgs.gov/hans-public/api/volcano/getMonitoredVolcanoes"
+
+
 
 
 @router.get("/earthquakes")
@@ -106,6 +112,7 @@ async def get_volcanoes(
         raise HTTPException(502, "Failed to fetch volcano data from USGS") 
     
 @router.get("/dart-buoys")
+@limiter.limit("30/minute")
 async def get_dart_buoys(
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -235,6 +242,7 @@ async def earthquake_stats(
         raise HTTPException(502, "Failed to fetch stats from USGS")
     
 @router.get("/active-faults")
+@limiter.limit("10/hour")   # expensive — proxies 10MB from GitHub
 async def get_active_faults(
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -273,6 +281,7 @@ async def get_active_faults(
         raise HTTPException(502, "Failed to fetch active faults data")
     
 @router.get("/vaac-advisories")
+@limiter.limit("20/hour")
 async def get_vaac_advisories(
     current_user: models.User = Depends(auth.get_current_user),
 ):
