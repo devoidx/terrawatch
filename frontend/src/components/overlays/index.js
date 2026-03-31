@@ -5,6 +5,7 @@ import { DartBuoysOverlay }        from './DartBuoys'
 import { ActiveFaultsOverlay }     from './ActiveFaults'
 import { SeismicHazardUSOverlay }  from './SeismicHazardUS'
 import { VaacAdvisoriesOverlay }   from './VaacAdvisories'
+import { USGSFaultsOverlay }       from './USGSFaults'
 
 export const OVERLAYS = [
   TectonicPlatesOverlay,
@@ -14,4 +15,5 @@ export const OVERLAYS = [
   ActiveFaultsOverlay,
   SeismicHazardUSOverlay,
   VaacAdvisoriesOverlay,
+  USGSFaultsOverlay,
 ]
