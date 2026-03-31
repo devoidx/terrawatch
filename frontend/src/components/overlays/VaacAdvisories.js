@@ -62,25 +62,6 @@ export const VaacAdvisoriesOverlay = {
         .addTo(group)
     })
 
-    if (advisories.length === 0) {
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="
-          background:rgba(217,119,6,0.15);
-          border:1.5px solid #d97706;
-          border-radius:8px;
-          padding:4px 8px;
-          color:#fcd34d;
-          font-size:11px;
-          font-family:sans-serif;
-          white-space:nowrap;
-          font-weight:600;
-        ">🌋 No active ash cloud advisories</div>`,
-        iconAnchor: [130, 10],
-      })
-      L.marker([20, -160], { icon, interactive: false }).addTo(group)
-    }
-
     group.addTo(map)
     return group
   },
