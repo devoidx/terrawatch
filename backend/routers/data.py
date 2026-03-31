@@ -271,3 +271,131 @@ async def get_active_faults(
     except httpx.HTTPError as e:
         logger.error(f"Active faults fetch error: {e}")
         raise HTTPException(502, "Failed to fetch active faults data")
+    
+@router.get("/vaac-advisories")
+async def get_vaac_advisories(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Fetch and parse current volcanic ash advisories from NOAA Washington VAAC."""
+    import xml.etree.ElementTree as ET
+    import re
+
+    try:
+        # Fetch the current advisories page to get XML links
+        async with httpx.AsyncClient(timeout=30) as client:
+            page = await client.get(
+                "https://www.ospo.noaa.gov/products/atmosphere/vaac/messages.html"
+            )
+            page.raise_for_status()
+
+        # Extract XML URLs from page - get the most recent per volcano
+        xml_urls = re.findall(
+            r'https://www\.ospo\.noaa\.gov/products/atmosphere/vaac/volcanoes/xml_files/[^"]+\.xml',
+            page.text
+        )
+
+        # Deduplicate by volcano (keep first/most recent per filename prefix)
+        seen_volcanoes = set()
+        unique_urls = []
+        for url in xml_urls:
+            filename = url.split('/')[-1]
+            # FVXX20, FVXX21 etc are volcano codes
+            code = filename[:6]
+            if code not in seen_volcanoes:
+                seen_volcanoes.add(code)
+                unique_urls.append(url)
+            if len(unique_urls) >= 20:
+                break
+
+        advisories = []
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            for url in unique_urls:
+                try:
+                    r = await client.get(url)
+                    if r.status_code != 200:
+                        continue
+
+                    root = ET.fromstring(r.text)
+                    ns = {
+                        'iwxxm': 'http://icao.int/iwxxm/3.0',
+                        'gml':   'http://www.opengis.net/gml/3.2',
+                    }
+
+                    def find_text(el, path):
+                        found = el.find(path, ns)
+                        return found.text.strip() if found is not None and found.text else ''
+
+                    # Volcano info
+                    vol_el    = root.find('.//iwxxm:EruptingVolcano', ns)
+                    if vol_el is None:
+                        continue
+
+                    vol_name  = find_text(vol_el, 'iwxxm:name').split(' ')[0]
+                    pos_text  = find_text(vol_el, './/gml:pos')
+                    region    = find_text(root, './/iwxxm:stateOrRegion')
+                    eruption  = find_text(root, './/iwxxm:eruptionDetails')
+                    issue_time = find_text(root, './/iwxxm:issueTime//gml:timePosition')
+                    elev      = find_text(vol_el, 'iwxxm:summitElevation')
+
+                    if not pos_text:
+                        continue
+                    lat, lng = [float(x) for x in pos_text.split()]
+
+                    def parse_polygon(el):
+                        pos = el.find('.//gml:posList', ns)
+                        if pos is None or not pos.text:
+                            return None
+                        coords = [float(x) for x in pos.text.strip().split()]
+                        # GML is lat lng pairs, GeoJSON needs [lng, lat]
+                        pairs = [[coords[i+1], coords[i]] for i in range(0, len(coords)-1, 2)]
+                        if pairs and pairs[0] != pairs[-1]:
+                            pairs.append(pairs[0])
+                        return pairs
+
+                    # Observed ash cloud
+                    obs_el  = root.find('.//iwxxm:observation', ns)
+                    obs_poly = None
+                    obs_upper = ''
+                    obs_lower = ''
+                    if obs_el is not None:
+                        obs_poly  = parse_polygon(obs_el)
+                        obs_upper = find_text(obs_el, './/iwxxm:upperLimit')
+                        obs_lower = find_text(obs_el, './/iwxxm:lowerLimit')
+
+                    # Forecast polygons (6h, 12h, 18h)
+                    forecasts = []
+                    for fc in root.findall('.//iwxxm:forecast', ns):
+                        fc_time = find_text(fc, './/gml:timePosition')
+                        fc_poly = parse_polygon(fc)
+                        no_ash  = fc.find('.//iwxxm:noVolcanicAshExpected', ns) is not None
+                        if fc_poly or no_ash:
+                            forecasts.append({
+                                'time':   fc_time,
+                                'polygon': fc_poly,
+                                'no_ash': no_ash,
+                            })
+
+                    advisories.append({
+                        'volcano':    vol_name,
+                        'region':     region,
+                        'lat':        lat,
+                        'lng':        lng,
+                        'elevation':  elev,
+                        'eruption':   eruption,
+                        'issue_time': issue_time,
+                        'obs_polygon': obs_poly,
+                        'obs_upper':  obs_upper,
+                        'obs_lower':  obs_lower,
+                        'forecasts':  forecasts,
+                    })
+
+                except Exception as e:
+                    logger.warning(f"Failed to parse VAAC XML {url}: {e}")
+                    continue
+
+        return {'advisories': advisories, 'count': len(advisories)}
+
+    except Exception as e:
+        logger.error(f"VAAC advisories error: {e}")
+        raise HTTPException(502, "Failed to fetch VAAC advisories")
