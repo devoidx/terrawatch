@@ -9,15 +9,18 @@ export const USGSFaultsOverlay = {
   color: '#dc2626',
 
   async load(map, L) {
+    // Use WMS with transparent=true — white areas are truly transparent in PNG
+    // Remove any blend mode tricks
     const layer = L.tileLayer.wms(
       'https://earthquake.usgs.gov/arcgis/services/haz/Qfaults/MapServer/WMSServer',
       {
-        layers:      '21',       // National Database layer
-        format:      'image/png',
-        transparent: true,
-        opacity:     0.75,
-        version:     '1.3.0',
-        attribution: 'USGS Quaternary Fault and Fold Database',
+        layers:          '0,1',
+        format:          'image/png',
+        transparent:     true,
+        opacity:         0.9,
+        version:         '1.3.0',
+        bgcolor:         '0x000000',  // black background treated as transparent
+        attribution:     'USGS Quaternary Fault and Fold Database',
       }
     ).addTo(map)
 
