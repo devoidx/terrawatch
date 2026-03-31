@@ -1,56 +1,63 @@
-import logging
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordRequestForm
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-import models, schemas, auth
+import models
 from database import get_db
+import os
 
-logger  = logging.getLogger(__name__)
-limiter = Limiter(key_func=get_remote_address)
-router  = APIRouter(prefix="/api/auth", tags=["auth"])
+SECRET_KEY = os.getenv("SECRET_KEY", "changeme-secret-key")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-@router.post("/register", response_model=schemas.UserOut, status_code=201)
-@limiter.limit("5/hour")
-def register(request: Request, data: schemas.UserCreate, db: Session = Depends(get_db)):
-    if db.query(models.User).filter(models.User.username == data.username).first():
-        raise HTTPException(400, "Username already taken")
-    if db.query(models.User).filter(models.User.email == data.email).first():
-        raise HTTPException(400, "Email already registered")
-    user = models.User(
-        username=data.username,
-        email=data.email,
-        password_hash=auth.hash_password(data.password),
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+
+def create_access_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> models.User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
     )
-    db.add(user)
-    db.flush()
-    prefs = models.NotificationPreference(user_id=user.id, email_enabled=True)
-    db.add(prefs)
-    db.commit()
-    db.refresh(user)
-    logger.info(f"New user registered: username='{user.username}' from IP={get_remote_address(request)}")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if user is None:
+        raise credentials_exception
     return user
 
 
-@router.post("/login", response_model=schemas.Token)
-@limiter.limit("10/minute")
-def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.username == form.username).first()
-    if not user or not auth.verify_password(form.password, user.password_hash):
-        logger.warning(
-            f"Failed login attempt for username='{form.username}' "
-            f"from IP={get_remote_address(request)}"
+def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
         )
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account disabled")
-    token = auth.create_access_token({"sub": user.username})
-    logger.info(f"Successful login: username='{user.username}' from IP={get_remote_address(request)}")
-    return {"access_token": token, "token_type": "bearer"}
-
-
-@router.get("/me", response_model=schemas.UserOut)
-def me(current_user: models.User = Depends(auth.get_current_user)):
     return current_user

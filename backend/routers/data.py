@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import Request, APIRouter, Depends, Query, HTTPException
 from fastapi.responses import JSONResponse
 import httpx
 import logging
@@ -113,7 +113,9 @@ async def get_volcanoes(
     
 @router.get("/dart-buoys")
 @limiter.limit("30/minute")
-async def get_dart_buoys(
+
+async def get_dart_buoys(request: Request,
+    
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Fetch and parse NOAA DART buoy station list."""
@@ -244,6 +246,7 @@ async def earthquake_stats(
 @router.get("/active-faults")
 @limiter.limit("10/hour")   # expensive — proxies 10MB from GitHub
 async def get_active_faults(
+    request: Request,
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Fetch GEM Global Active Faults GeoJSON, simplified for web display."""
@@ -282,7 +285,9 @@ async def get_active_faults(
     
 @router.get("/vaac-advisories")
 @limiter.limit("20/hour")
-async def get_vaac_advisories(
+
+async def get_vaac_advisories(request: Request,
+    
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Fetch and parse current volcanic ash advisories from NOAA Washington VAAC."""
