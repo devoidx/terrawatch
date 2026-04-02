@@ -444,7 +444,7 @@ async def get_volcano_detail(
                     p = feats[0]["properties"]
                     # Build image URL if available
                     img = p.get("VPImageFileName")
-                    img_url = f"https://volcano.si.edu/imgs/volcanoes/{img}" if img else None
+                    img_url = f"https://volcano.si.edu/imgs/volcanoes/{img}.jpg" if img else None
                     results["profile"] = {
                         "name":           p.get("VolcanoName"),
                         "country":        p.get("Country"),
