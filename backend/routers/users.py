@@ -11,6 +11,115 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 def get_profile(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
+@router.get("/dashboard")
+def get_dashboard(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Per-user dashboard stats."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+
+    now     = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    day_ago  = now - timedelta(days=1)
+
+    # Alert regions
+    regions = db.query(models.AlertRegion).filter(
+        models.AlertRegion.user_id == current_user.id
+    ).all()
+    active_regions  = [r for r in regions if r.is_active]
+
+    # Sent alerts this week
+    alerts_this_week = db.query(models.SentAlert).filter(
+        models.SentAlert.user_id == current_user.id,
+        models.SentAlert.notified_at >= week_ago,
+    ).order_by(models.SentAlert.notified_at.desc()).all()
+
+    # Alerts by day for sparkline (last 7 days)
+    alerts_by_day = []
+    for i in range(6, -1, -1):
+        day_start = now - timedelta(days=i+1)
+        day_end   = now - timedelta(days=i)
+        count = db.query(func.count(models.SentAlert.id)).filter(
+            models.SentAlert.user_id == current_user.id,
+            models.SentAlert.notified_at >= day_start,
+            models.SentAlert.notified_at < day_end,
+        ).scalar()
+        alerts_by_day.append({
+            'date':  (now - timedelta(days=i)).strftime('%a'),
+            'count': count,
+        })
+
+    # Alerts by region this week
+    alerts_by_region = []
+    for region in regions:
+        count = db.query(func.count(models.SentAlert.id)).filter(
+            models.SentAlert.user_id    == current_user.id,
+            models.SentAlert.alert_region_id == region.id,
+            models.SentAlert.notified_at >= week_ago,
+        ).scalar()
+        alerts_by_region.append({
+            'region_id':   region.id,
+            'region_name': region.name,
+            'count':       count,
+            'is_active':   region.is_active,
+        })
+
+    # Largest event this week
+    largest = db.query(models.SentAlert).filter(
+        models.SentAlert.user_id == current_user.id,
+        models.SentAlert.notified_at >= week_ago,
+        models.SentAlert.event_magnitude.isnot(None),
+    ).order_by(models.SentAlert.event_magnitude.desc()).first()
+
+    # Recent alerts (last 10)
+    recent_alerts = db.query(models.SentAlert).filter(
+        models.SentAlert.user_id == current_user.id,
+    ).order_by(models.SentAlert.notified_at.desc()).limit(10).all()
+
+    # Notification channels enabled
+    prefs = current_user.notification_prefs
+    channels = []
+    if prefs:
+        if prefs.email_enabled: channels.append('email')
+        if prefs.sms_enabled:   channels.append('sms')
+        if prefs.push_enabled:  channels.append('push')
+
+    return {
+        'user': {
+            'username':   current_user.username,
+            'email':      current_user.email,
+            'member_since': current_user.created_at.isoformat(),
+        },
+        'regions': {
+            'total':  len(regions),
+            'active': len(active_regions),
+        },
+        'alerts': {
+            'this_week':  len(alerts_this_week),
+            'last_24h':   sum(1 for a in alerts_this_week if a.notified_at >= day_ago),
+            'by_day':     alerts_by_day,
+            'by_region':  alerts_by_region,
+            'largest_event': {
+                'magnitude': float(largest.event_magnitude) if largest else None,
+                'location':  largest.event_location if largest else None,
+                'time':      largest.notified_at.isoformat() if largest else None,
+            },
+        },
+        'recent_alerts': [
+            {
+                'id':         a.id,
+                'event_type': a.event_type,
+                'magnitude':  float(a.event_magnitude) if a.event_magnitude else None,
+                'location':   a.event_location,
+                'time':       a.notified_at.isoformat(),
+                'channels':   a.channels_used,
+            }
+            for a in recent_alerts
+        ],
+        'channels': channels,
+    }
 
 @router.patch("/me/email")
 def update_email(

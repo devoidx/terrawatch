@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import AlertsPage from './pages/AlertsPage'
 import Admin from './pages/Admin'
+import UserDashboard from './pages/UserDashboard'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -33,8 +34,11 @@ function AppRoutes() {
     <Box minH="100vh" bg="gray.900">
       {user && <Navbar />}
       <Routes>
-        <Route path="/login"    element={user ? <Navigate to="/" /> : <Login />} />
+        <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
+        <Route path="/dashboard" element={
+          <PrivateRoute><UserDashboard /></PrivateRoute>} />
+
         <Route path="/" element={
           <PrivateRoute><Dashboard /></PrivateRoute>
         } />
