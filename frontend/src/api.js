@@ -51,7 +51,7 @@ export const getEqStats     = () =>
 export const getDartBuoys = () => api.get('/data/dart-buoys').then(r => r.data)
 
 export const getVolcanoDetail = (vnum) =>
-  apiClient.get(`/data/volcano/${vnum}`).then(r => r.data)
+  api.get(`/data/volcano/${vnum}`).then(r => r.data)
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const adminGetUsers      = () => api.get('/admin/users').then(r => r.data)

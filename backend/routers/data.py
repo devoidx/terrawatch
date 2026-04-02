@@ -419,103 +419,159 @@ async def get_volcano_detail(
     vnum: str,
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Fetch detailed volcano data from GVP and USGS HANS."""
     import re
-
+    from datetime import datetime, timedelta
     results = {}
 
     async with httpx.AsyncClient(timeout=20) as client:
-        # GVP volcano profile
+
+        # ── GVP volcano profile ───────────────────────────────────────────
         try:
             r = await client.get(
-                f"https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs"
-                f"?service=WFS&version=2.0.0&request=GetFeature"
-                f"&typeNames=GVP-VOTW:E3WebApp_HoloceneVolcanoes"
-                f"&outputFormat=application/json"
-                f"&CQL_FILTER=VolcanoNumber={vnum}"
+                "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs",
+                params={
+                    "service":     "WFS",
+                    "version":     "2.0.0",
+                    "request":     "GetFeature",
+                    "typeNames":   "GVP-VOTW:E3WebApp_HoloceneVolcanoes",
+                    "outputFormat":"application/json",
+                    "CQL_FILTER":  f"VolcanoNumber={vnum}",
+                }
             )
             if r.status_code == 200:
-                data  = r.json()
-                feats = data.get('features', [])
+                feats = r.json().get("features", [])
                 if feats:
-                    p = feats[0]['properties']
-                    results['profile'] = {
-                        'name':        p.get('VolcanoName'),
-                        'country':     p.get('Country'),
-                        'description': p.get('Remarks', ''),
-                        'type':        p.get('PrimaryVolcanoType', ''),
-                        'last_known':  p.get('LastKnownEruptionYear'),
+                    p = feats[0]["properties"]
+                    # Build image URL if available
+                    img = p.get("VPImageFileName")
+                    img_url = f"https://volcano.si.edu/imgs/volcanoes/{img}" if img else None
+                    results["profile"] = {
+                        "name":           p.get("VolcanoName"),
+                        "country":        p.get("Country"),
+                        "description":    p.get("Remarks", ""),
+                        "type":           p.get("VolcanoType", ""),
+                        "last_eruption":  p.get("LastEruption"),
+                        "elevation":      p.get("Elevation"),
+                        "tectonic":       p.get("TectonicSetting"),
+                        "pop_5km":        p.get("Within_5km"),
+                        "pop_10km":       p.get("Within_10km"),
+                        "pop_30km":       p.get("Within_30km"),
+                        "pop_100km":      p.get("Within_100km"),
+                        "image_url":      img_url,
+                        "image_caption":  p.get("VPImageCaption"),
+                        "image_credit":   p.get("VPImageCredit"),
+                        "lat":            p.get("LatitudeDecimal"),
+                        "lng":            p.get("LongitudeDecimal"),
+                        "gvp_url":        f"https://volcano.si.edu/volcano.cfm?vn={vnum}",
                     }
         except Exception as e:
             logger.warning(f"GVP profile error for {vnum}: {e}")
 
-        # GVP eruption history since 1960
+        # ── GVP eruption history since 1960 ───────────────────────────────
         try:
             r = await client.get(
-                f"https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs"
-                f"?service=WFS&version=2.0.0&request=GetFeature"
-                f"&typeNames=GVP-VOTW:E3WebApp_Eruptions1960"
-                f"&outputFormat=application/json"
-                f"&CQL_FILTER=VolcanoNumber={vnum}"
-                f"&sortBy=StartDateYear+D"
+                "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs",
+                params={
+                    "service":     "WFS",
+                    "version":     "2.0.0",
+                    "request":     "GetFeature",
+                    "typeNames":   "GVP-VOTW:E3WebApp_Eruptions1960",
+                    "outputFormat":"application/json",
+                    "CQL_FILTER":  f"VolcanoNumber={vnum}",
+                    "sortBy":      "StartDateYear D",
+                }
             )
             if r.status_code == 200:
-                data  = r.json()
-                feats = data.get('features', [])
-                results['eruptions'] = [
+                feats = r.json().get("features", [])
+                results["eruptions"] = [
                     {
-                        'start_year':   f['properties'].get('StartDateYear'),
-                        'start_month':  f['properties'].get('StartDateMonth'),
-                        'start_day':    f['properties'].get('StartDateDay'),
-                        'end_year':     f['properties'].get('EndDateYear'),
-                        'end_month':    f['properties'].get('EndDateMonth'),
-                        'end_day':      f['properties'].get('EndDateDay'),
-                        'vei':          f['properties'].get('ExplosivityIndexMax'),
-                        'continuing':   f['properties'].get('ContinuingEruption') == 'True',
+                        "start_year":  f["properties"].get("StartDateYear"),
+                        "start_month": f["properties"].get("StartDateMonth"),
+                        "start_day":   f["properties"].get("StartDateDay"),
+                        "end_year":    f["properties"].get("EndDateYear"),
+                        "end_month":   f["properties"].get("EndDateMonth"),
+                        "end_day":     f["properties"].get("EndDateDay"),
+                        "vei":         f["properties"].get("ExplosivityIndexMax"),
+                        "continuing":  f["properties"].get("ContinuingEruption") == "True",
                     }
                     for f in feats
                 ]
         except Exception as e:
             logger.warning(f"GVP eruptions error for {vnum}: {e}")
-            results['eruptions'] = []
+            results["eruptions"] = []
 
-        # USGS HANS — US volcanoes only
+        # ── Nearby earthquakes (USGS, last 30 days, within 100km) ─────────
+        try:
+            profile = results.get("profile", {})
+            lat = profile.get("lat")
+            lng = profile.get("lng")
+            if lat and lng:
+                start = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S")
+                r = await client.get(
+                    "https://earthquake.usgs.gov/fdsnws/event/1/query",
+                    params={
+                        "format":       "geojson",
+                        "latitude":     lat,
+                        "longitude":    lng,
+                        "maxradiuskm":  100,
+                        "minmagnitude": 2.5,
+                        "starttime":    start,
+                        "orderby":      "time",
+                        "limit":        20,
+                    }
+                )
+                if r.status_code == 200:
+                    feats = r.json().get("features", [])
+                    results["nearby_earthquakes"] = [
+                        {
+                            "magnitude": f["properties"].get("mag"),
+                            "place":     f["properties"].get("place"),
+                            "time":      f["properties"].get("time"),
+                            "depth":     f["geometry"]["coordinates"][2],
+                            "url":       f["properties"].get("url"),
+                        }
+                        for f in feats
+                    ]
+        except Exception as e:
+            logger.warning(f"Nearby earthquakes error for {vnum}: {e}")
+
+        # ── USGS HANS — US volcanoes only ─────────────────────────────────
         try:
             r = await client.get(
                 f"https://volcanoes.usgs.gov/hans-public/api/volcano/getVolcano/{vnum}"
             )
-            if r.status_code == 200 and 'not found' not in r.text.lower():
+            if r.status_code == 200:
                 d = r.json()
-                # Extract webcam links from boilerplate HTML
                 webcam_links = re.findall(
-                    r'href="(https?://[^"]+webcam[^"]*)"', d.get('boilerplate', '')
+                    r'href="(https?://[^"]+webcam[^"]*)"',
+                    d.get("boilerplate", "")
                 )
-                results['monitoring'] = {
-                    'observatory':     d.get('obs_fullname'),
-                    'obs_abbr':        d.get('obs_abbr'),
-                    'volcano_url':     d.get('volcano_url'),
-                    'image_url':       d.get('volcano_image_url'),
-                    'nvews_threat':    d.get('nvews_threat'),
-                    'webcam_links':    webcam_links,
+                results["monitoring"] = {
+                    "observatory":  d.get("obs_fullname"),
+                    "obs_abbr":     d.get("obs_abbr"),
+                    "volcano_url":  d.get("volcano_url"),
+                    "image_url":    d.get("volcano_image_url"),
+                    "nvews_threat": d.get("nvews_threat"),
+                    "webcam_links": webcam_links,
                 }
         except Exception as e:
             logger.warning(f"HANS error for {vnum}: {e}")
 
-        # USGS HANS latest notice — US only
+        # ── USGS HANS latest notice ───────────────────────────────────────
         try:
             r = await client.get(
                 f"https://volcanoes.usgs.gov/hans-public/api/volcano/newestForVolcano/{vnum}"
             )
-            if r.status_code == 200 and 'not found' not in r.text.lower():
+            if r.status_code == 200:
                 d = r.json()
-                results['latest_notice'] = {
-                    'title':       d.get('noticeTitle'),
-                    'type':        d.get('noticeType'),
-                    'sent':        d.get('sentUtc'),
-                    'alert_level': d.get('noticeHighestAlertLevel'),
-                    'color_code':  d.get('noticeHighestColorCode'),
-                    'url':         d.get('noticeUrl'),
-                    'html':        d.get('noticeHtml', '')[:2000],
+                results["latest_notice"] = {
+                    "title":       d.get("noticeTitle"),
+                    "type":        d.get("noticeType"),
+                    "sent":        d.get("sentUtc"),
+                    "alert_level": d.get("noticeHighestAlertLevel"),
+                    "color_code":  d.get("noticeHighestColorCode"),
+                    "url":         d.get("noticeUrl"),
+                    "html":        d.get("noticeHtml", "")[:2000],
                 }
         except Exception as e:
             logger.warning(f"HANS notice error for {vnum}: {e}")
