@@ -1,8 +1,13 @@
+from venv import logger
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 import models, schemas, auth
 from database import get_db
+
+import httpx
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -12,7 +17,7 @@ def get_profile(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
 @router.get("/dashboard")
-def get_dashboard(
+async def get_dashboard(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -85,7 +90,36 @@ def get_dashboard(
         if prefs.email_enabled: channels.append('email')
         if prefs.sms_enabled:   channels.append('sms')
         if prefs.push_enabled:  channels.append('push')
+        
+    # Global stats from USGS (last 24h and 7d)
+    
 
+    global_stats = {
+       'earthquakes_24h': 0,
+       'earthquakes_7d':  0,
+       'significant_7d':  0,  # M5.0+
+       'major_7d':        0,  # M6.0+
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            # Use USGS summary feeds — fast and cached
+            r7d = await client.get(
+                'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson'
+            )
+            if r7d.status_code == 200:
+                features = r7d.json().get('features', [])
+                day_ago_ms = (datetime.utcnow() - timedelta(days=1)).timestamp() * 1000
+                global_stats['earthquakes_7d']  = len(features)
+                global_stats['earthquakes_24h'] = sum(1 for f in features
+                    if f['properties']['time'] >= day_ago_ms)
+                global_stats['significant_7d']  = sum(1 for f in features
+                    if (f['properties']['mag'] or 0) >= 5.0)
+                global_stats['major_7d']        = sum(1 for f in features
+                    if (f['properties']['mag'] or 0) >= 6.0)
+    except Exception as e:
+        logger.warning(f"Failed to fetch global stats: {e}")
+
+    
     return {
         'user': {
             'username':   current_user.username,
@@ -119,6 +153,7 @@ def get_dashboard(
             for a in recent_alerts
         ],
         'channels': channels,
+        'global': global_stats,
     }
 
 @router.patch("/me/email")
