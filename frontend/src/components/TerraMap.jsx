@@ -320,6 +320,10 @@ export default function TerraMap({
             ${v.location ? `<div style="color:#718096;font-size:12px;margin-top:4px">
               ${v.location}</div>` : ''}
           </div>
+          <a href="/volcano/${v.vnum || v.id}"
+            style="font-size:12px;color:#ed8936;display:block;margin-top:6px;text-decoration:none;">
+              View details →
+          </a>
         `)
         .addTo(volcLayer.current)
     })

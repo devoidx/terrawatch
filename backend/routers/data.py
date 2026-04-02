@@ -413,3 +413,111 @@ async def get_vaac_advisories(request: Request,
     except Exception as e:
         logger.error(f"VAAC advisories error: {e}")
         raise HTTPException(502, "Failed to fetch VAAC advisories")
+    
+@router.get("/volcano/{vnum}")
+async def get_volcano_detail(
+    vnum: str,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Fetch detailed volcano data from GVP and USGS HANS."""
+    import re
+
+    results = {}
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        # GVP volcano profile
+        try:
+            r = await client.get(
+                f"https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs"
+                f"?service=WFS&version=2.0.0&request=GetFeature"
+                f"&typeNames=GVP-VOTW:E3WebApp_HoloceneVolcanoes"
+                f"&outputFormat=application/json"
+                f"&CQL_FILTER=VolcanoNumber={vnum}"
+            )
+            if r.status_code == 200:
+                data  = r.json()
+                feats = data.get('features', [])
+                if feats:
+                    p = feats[0]['properties']
+                    results['profile'] = {
+                        'name':        p.get('VolcanoName'),
+                        'country':     p.get('Country'),
+                        'description': p.get('Remarks', ''),
+                        'type':        p.get('PrimaryVolcanoType', ''),
+                        'last_known':  p.get('LastKnownEruptionYear'),
+                    }
+        except Exception as e:
+            logger.warning(f"GVP profile error for {vnum}: {e}")
+
+        # GVP eruption history since 1960
+        try:
+            r = await client.get(
+                f"https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs"
+                f"?service=WFS&version=2.0.0&request=GetFeature"
+                f"&typeNames=GVP-VOTW:E3WebApp_Eruptions1960"
+                f"&outputFormat=application/json"
+                f"&CQL_FILTER=VolcanoNumber={vnum}"
+                f"&sortBy=StartDateYear+D"
+            )
+            if r.status_code == 200:
+                data  = r.json()
+                feats = data.get('features', [])
+                results['eruptions'] = [
+                    {
+                        'start_year':   f['properties'].get('StartDateYear'),
+                        'start_month':  f['properties'].get('StartDateMonth'),
+                        'start_day':    f['properties'].get('StartDateDay'),
+                        'end_year':     f['properties'].get('EndDateYear'),
+                        'end_month':    f['properties'].get('EndDateMonth'),
+                        'end_day':      f['properties'].get('EndDateDay'),
+                        'vei':          f['properties'].get('ExplosivityIndexMax'),
+                        'continuing':   f['properties'].get('ContinuingEruption') == 'True',
+                    }
+                    for f in feats
+                ]
+        except Exception as e:
+            logger.warning(f"GVP eruptions error for {vnum}: {e}")
+            results['eruptions'] = []
+
+        # USGS HANS — US volcanoes only
+        try:
+            r = await client.get(
+                f"https://volcanoes.usgs.gov/hans-public/api/volcano/getVolcano/{vnum}"
+            )
+            if r.status_code == 200 and 'not found' not in r.text.lower():
+                d = r.json()
+                # Extract webcam links from boilerplate HTML
+                webcam_links = re.findall(
+                    r'href="(https?://[^"]+webcam[^"]*)"', d.get('boilerplate', '')
+                )
+                results['monitoring'] = {
+                    'observatory':     d.get('obs_fullname'),
+                    'obs_abbr':        d.get('obs_abbr'),
+                    'volcano_url':     d.get('volcano_url'),
+                    'image_url':       d.get('volcano_image_url'),
+                    'nvews_threat':    d.get('nvews_threat'),
+                    'webcam_links':    webcam_links,
+                }
+        except Exception as e:
+            logger.warning(f"HANS error for {vnum}: {e}")
+
+        # USGS HANS latest notice — US only
+        try:
+            r = await client.get(
+                f"https://volcanoes.usgs.gov/hans-public/api/volcano/newestForVolcano/{vnum}"
+            )
+            if r.status_code == 200 and 'not found' not in r.text.lower():
+                d = r.json()
+                results['latest_notice'] = {
+                    'title':       d.get('noticeTitle'),
+                    'type':        d.get('noticeType'),
+                    'sent':        d.get('sentUtc'),
+                    'alert_level': d.get('noticeHighestAlertLevel'),
+                    'color_code':  d.get('noticeHighestColorCode'),
+                    'url':         d.get('noticeUrl'),
+                    'html':        d.get('noticeHtml', '')[:2000],
+                }
+        except Exception as e:
+            logger.warning(f"HANS notice error for {vnum}: {e}")
+
+    return results

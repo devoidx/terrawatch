@@ -50,6 +50,9 @@ export const getEqStats     = () =>
   api.get('/data/earthquakes/stats').then(r => r.data)
 export const getDartBuoys = () => api.get('/data/dart-buoys').then(r => r.data)
 
+export const getVolcanoDetail = (vnum) =>
+  apiClient.get(`/data/volcano/${vnum}`).then(r => r.data)
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const adminGetUsers      = () => api.get('/admin/users').then(r => r.data)
 export const adminUpdateUser    = (id, d) => api.patch(`/admin/users/${id}`, d).then(r => r.data)

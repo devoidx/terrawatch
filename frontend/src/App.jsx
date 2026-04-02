@@ -9,6 +9,7 @@ import Profile from './pages/Profile'
 import AlertsPage from './pages/AlertsPage'
 import Admin from './pages/Admin'
 import UserDashboard from './pages/UserDashboard'
+import VolcanoDetail from './pages/VolcanoDetail'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -38,6 +39,10 @@ function AppRoutes() {
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
         <Route path="/dashboard" element={
           <PrivateRoute><UserDashboard /></PrivateRoute>} />
+
+        <Route path="/volcano/:vnum" element={
+          <PrivateRoute><VolcanoDetail /></PrivateRoute>
+        } />
 
         <Route path="/" element={
           <PrivateRoute><Dashboard /></PrivateRoute>
