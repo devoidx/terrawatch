@@ -60,14 +60,25 @@ async def get_volcanoes(
                 "https://volcanoes.usgs.gov/vsc/api/volcanoApi/volcanoesGVP"
             )
             r1.raise_for_status()
-
             # Current US alert status
             r2 = await client.get(
                 "https://volcanoes.usgs.gov/hans-public/api/volcano/getMonitoredVolcanoes"
             )
             r2.raise_for_status()
+            # GVP continuing eruptions (global)
+            r3 = await client.get(
+                "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs",
+                params={
+                    "service":      "WFS",
+                    "version":      "2.0.0",
+                    "request":      "GetFeature",
+                    "typeNames":    "GVP-VOTW:E3WebApp_Eruptions1960",
+                    "outputFormat": "application/json",
+                    "CQL_FILTER":   "ContinuingEruption='True'",
+                }
+            )
 
-        # Build alert status lookup keyed by vnum
+        # Build alert status lookup keyed by vnum — US volcanoes from HANS
         alert_lookup = {}
         for v in r2.json():
             vnum = v.get("vnum")
@@ -77,6 +88,14 @@ async def get_volcanoes(
                     "color_code":  (v.get("color_code")  or "GREEN").lower(),
                 }
 
+        # Build continuing eruption set from GVP — for non-US volcanoes
+        continuing_vnums = set()
+        if r3.status_code == 200:
+            for f in r3.json().get("features", []):
+                vnum = f["properties"].get("VolcanoNumber")
+                if vnum:
+                    continuing_vnums.add(str(vnum))
+
         results = []
         for v in r1.json():
             lat  = v.get("latitude")
@@ -85,12 +104,22 @@ async def get_volcanoes(
             if lat is None or lng is None:
                 continue
 
-            status = alert_lookup.get(vnum, {
-                "alert_level": "normal",
-                "color_code":  "green",
-            })
-            alert_level = status["alert_level"]
+            if vnum in alert_lookup:
+                # US volcano — use HANS status
+                status = alert_lookup[vnum]
+            elif vnum in continuing_vnums:
+                # Non-US with active continuing eruption from GVP
+                status = {
+                    "alert_level": "warning",
+                    "color_code":  "red",
+                }
+            else:
+                status = {
+                    "alert_level": "normal",
+                    "color_code":  "green",
+                }
 
+            alert_level = status["alert_level"]
             if elevated_only and alert_level == "normal":
                 continue
 
@@ -107,7 +136,6 @@ async def get_volcanoes(
             })
 
         return {"volcanoes": results, "count": len(results)}
-
     except httpx.HTTPError as e:
         logger.error(f"Volcano fetch error: {e}")
         raise HTTPException(502, "Failed to fetch volcano data from USGS") 
