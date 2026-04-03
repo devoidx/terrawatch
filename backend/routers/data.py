@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from fastapi.responses import Response
 
 import auth, models
 
@@ -444,7 +445,7 @@ async def get_volcano_detail(
                     p = feats[0]["properties"]
                     # Build image URL if available
                     img = p.get("VPImageFileName")
-                    img_url = f"https://volcano.si.edu/imgs/volcanoes/{img}.jpg" if img else None
+                    img_url = f"/api/data/volcano-image/{img}" if img else None
                     results["profile"] = {
                         "name":           p.get("VolcanoName"),
                         "country":        p.get("Country"),
@@ -577,3 +578,35 @@ async def get_volcano_detail(
             logger.warning(f"HANS notice error for {vnum}: {e}")
 
     return results
+
+
+
+@router.get("/volcano-image/{image_id}")
+async def get_volcano_image(
+    image_id: str,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Proxy GVP volcano images to avoid CORS restrictions."""
+    # Validate — only allow GVP image IDs
+    import re
+    if not re.match(r'^GVP-\d+$', image_id):
+        raise HTTPException(400, "Invalid image ID")
+    
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"https://volcano.si.edu/imgs/volcanoes/{image_id}.jpg",
+                headers={"Referer": "https://volcano.si.edu/"}
+            )
+            if r.status_code == 200:
+                return Response(
+                    content=r.content,
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"}
+                )
+            raise HTTPException(404, "Image not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Volcano image proxy error for {image_id}: {e}")
+        raise HTTPException(502, "Failed to fetch image")
