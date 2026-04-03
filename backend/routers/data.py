@@ -445,7 +445,7 @@ async def get_volcano_detail(
                     p = feats[0]["properties"]
                     # Build image URL if available
                     img = p.get("VPImageFileName")
-                    img_url = f"/api/data/volcano-image/{img}" if img else None
+                    img_url = f"https://volcano.si.edu/gallery/ShowImage.cfm?photo={img}" if img else None
                     results["profile"] = {
                         "name":           p.get("VolcanoName"),
                         "country":        p.get("Country"),
@@ -582,16 +582,15 @@ async def get_volcano_detail(
 
 
 @router.get("/volcano-image/{image_id}")
-async def get_volcano_image(image_id: str):  # no auth dependency
+async def get_volcano_image(image_id: str):
     """Proxy GVP volcano images — public endpoint."""
     import re
     if not re.match(r'^GVP-\d+$', image_id):
         raise HTTPException(400, "Invalid image ID")
-    
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(
-                f"https://volcano.si.edu/imgs/volcanoes/{image_id}.jpg",
+                f"https://volcano.si.edu/gallery/photos/{image_id}.jpg",
                 headers={"Referer": "https://volcano.si.edu/"}
             )
             if r.status_code == 200:
