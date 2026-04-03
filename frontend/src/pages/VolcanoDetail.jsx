@@ -103,8 +103,35 @@ export default function VolcanoDetail() {
                     </Button>
                 </HStack>
 
-                {/* Volcano photo link — embedded images blocked by GVP */}
-                {profile?.image_page && (
+                {/* Image + gallery links */}
+                {monitoring?.image_url ? (
+                    <Box borderRadius="xl" overflow="hidden">
+                        <img
+                            src={monitoring.image_url}
+                            alt={profile?.name}
+                            style={{ width: '100%', maxHeight: '320px', objectFit: 'cover' }}
+                            onError={e => { e.target.parentElement.style.display = 'none' }}
+                        />
+                        {/* US volcano gallery links */}
+                        {monitoring.volcano_url && (
+                            <Box bg="gray.800" px={3} py={2}>
+                                <HStack spacing={3}>
+                                    <Button as="a"
+                                        href={`${monitoring.volcano_url}/photo-and-video-chronology`}
+                                        target="_blank" size="xs" variant="ghost" color="brand.400">
+                                        📷 Photo gallery →
+                                    </Button>
+                                    {profile?.image_page && (
+                                        <Button as="a" href={profile.image_page} target="_blank"
+                                            size="xs" variant="ghost" color="gray.500">
+                                            GVP photo →
+                                        </Button>
+                                    )}
+                                </HStack>
+                            </Box>
+                        )}
+                    </Box>
+                ) : profile?.image_page ? (
                     <Box bg="gray.800" borderRadius="xl" border="1px solid"
                         borderColor="whiteAlpha.100" p={4}>
                         <HStack justify="space-between">
@@ -122,7 +149,7 @@ export default function VolcanoDetail() {
                             </Button>
                         </HStack>
                     </Box>
-                )}
+                ) : null}
 
                 {/* Current status — US only */}
                 {latest_notice && (
