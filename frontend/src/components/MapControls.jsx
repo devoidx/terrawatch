@@ -314,7 +314,7 @@ export default function MapControls({
                       <Divider borderColor="whiteAlpha.100" mt={1} />
                       <Text fontSize="2xs" fontWeight="700" color="gray.400"
                         textTransform="uppercase" letterSpacing="wider">
-                        Seismic Hazard (US) — PGA
+                        Seismic Hazard (US) — PGA (g)
                       </Text>
                       {HAZARD_SCALE.map(({ label, color }) => (
                         <HStack key={label} spacing={2}>
@@ -324,7 +324,10 @@ export default function MapControls({
                         </HStack>
                       ))}
                       <Text fontSize="2xs" color="gray.500" mt={1}>
-                        10% exceedance in 50 years
+                        2% exceedance in 50 yrs
+                      </Text>
+                      <Text fontSize="2xs" color="gray.500">
+                        g = multiple of gravity (9.8 m/s²)
                       </Text>
                     </>
                   )}
