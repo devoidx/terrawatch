@@ -582,12 +582,8 @@ async def get_volcano_detail(
 
 
 @router.get("/volcano-image/{image_id}")
-async def get_volcano_image(
-    image_id: str,
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    """Proxy GVP volcano images to avoid CORS restrictions."""
-    # Validate — only allow GVP image IDs
+async def get_volcano_image(image_id: str):  # no auth dependency
+    """Proxy GVP volcano images — public endpoint."""
     import re
     if not re.match(r'^GVP-\d+$', image_id):
         raise HTTPException(400, "Invalid image ID")
