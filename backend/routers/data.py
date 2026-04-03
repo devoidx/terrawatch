@@ -445,7 +445,8 @@ async def get_volcano_detail(
                     p = feats[0]["properties"]
                     # Build image URL if available
                     img = p.get("VPImageFileName")
-                    img_url = f"https://volcano.si.edu/gallery/ShowImage.cfm?photo={img}" if img else None
+                    img_url = None  # GVP blocks all server-side and cross-origin image requests
+                    img_page = f"https://volcano.si.edu/gallery/ShowImage.cfm?photo={img}" if img else None
                     results["profile"] = {
                         "name":           p.get("VolcanoName"),
                         "country":        p.get("Country"),
@@ -458,7 +459,8 @@ async def get_volcano_detail(
                         "pop_10km":       p.get("Within_10km"),
                         "pop_30km":       p.get("Within_30km"),
                         "pop_100km":      p.get("Within_100km"),
-                        "image_url":      img_url,
+                        "image_url":     None,
+                        "image_page":    img_page,
                         "image_caption":  p.get("VPImageCaption"),
                         "image_credit":   p.get("VPImageCredit"),
                         "lat":            p.get("LatitudeDecimal"),

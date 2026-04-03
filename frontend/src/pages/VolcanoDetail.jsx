@@ -103,33 +103,21 @@ export default function VolcanoDetail() {
                     </Button>
                 </HStack>
 
-                {/* Volcano photo link */}
-                {profile?.image_url && (
-                    <Box
-                        bg="gray.800"
-                        borderRadius="xl"
-                        border="1px solid"
-                        borderColor="whiteAlpha.100"
-                        p={4}
-                    >
+                {/* Volcano photo link — embedded images blocked by GVP */}
+                {profile?.image_page && (
+                    <Box bg="gray.800" borderRadius="xl" border="1px solid"
+                        borderColor="whiteAlpha.100" p={4}>
                         <HStack justify="space-between">
                             <VStack align="flex-start" spacing={0}>
                                 <Text fontSize="sm" color="gray.300">
-                                    {profile.image_caption || 'Volcano photo available'}
+                                    {profile.image_caption || 'Photo available'}
                                 </Text>
                                 {profile.image_credit && (
                                     <Text fontSize="2xs" color="gray.500">{profile.image_credit}</Text>
                                 )}
                             </VStack>
-                            <Button
-                                as="a"
-                                href={`https://volcano.si.edu/gallery/ShowImage.cfm?photo=${profile.image_url.split('/').pop().replace('.jpg', '')}`}
-                                target="_blank"
-                                size="sm"
-                                variant="outline"
-                                colorScheme="orange"
-                                flexShrink={0}
-                            >
+                            <Button as="a" href={profile.image_page} target="_blank"
+                                size="sm" variant="outline" colorScheme="orange" flexShrink={0}>
                                 📷 View photo →
                             </Button>
                         </HStack>
