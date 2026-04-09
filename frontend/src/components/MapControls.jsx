@@ -52,7 +52,18 @@ export default function MapControls({
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [legendExpanded, setLegendExpanded] = useState(false)
-  const [activeOverlays, setActiveOverlays] = useState({})
+  const [activeOverlays, setActiveOverlays] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tw_active_overlays')
+      return saved ? JSON.parse(saved) : {}
+    } catch { return {} }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tw_active_overlays', JSON.stringify(activeOverlays))
+    } catch { }
+  }, [activeOverlays])
 
   const handleActiveChange = useCallback((active) => {
     setActiveOverlays({ ...active })
