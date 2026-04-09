@@ -13,7 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   adminGetUsers, adminUpdateUser, adminDeleteUser,
   adminGetRegions, adminGetSentAlerts, adminGetSettings, adminUpdateSetting,
-  adminUpdateSmtp, adminTestSmtp
+  adminUpdateSmtp, adminTestSmtp, adminGetHealth
 } from '../api'
 
 // ── Users tab ─────────────────────────────────────────────────────────────────
@@ -447,7 +447,263 @@ function SettingsTab() {
   )
 }
 
+function StatusDot({ ok, warn }) {
+  const color = ok ? 'green.400' : warn ? 'yellow.400' : 'red.400'
+  return <Box w="8px" h="8px" borderRadius="full" bg={color} flexShrink={0} />
+}
+
+function FeedRow({ label, feed }) {
+  const ok   = !!feed.last_success && feed.consecutive_failures === 0
+  const warn = feed.consecutive_failures > 0 && feed.consecutive_failures < 3
+  const ts   = feed.last_success
+    ? new Date(feed.last_success).toLocaleTimeString()
+    : 'Never'
+
+  return (
+    <HStack justify="space-between" py={2}
+      borderBottom="1px solid" borderColor="whiteAlpha.50">
+      <HStack spacing={3}>
+        <StatusDot ok={ok} warn={warn} />
+        <Text fontSize="sm" color="gray.300">{label}</Text>
+      </HStack>
+      <VStack align="flex-end" spacing={0}>
+        <Text fontSize="xs" color={ok ? 'gray.400' : 'red.400'}>
+          {ok ? `Last OK: ${ts}` : feed.last_error?.split('—')[1]?.trim() || 'Error'}
+        </Text>
+        {feed.consecutive_failures > 0 && (
+          <Text fontSize="2xs" color="red.400">
+            {feed.consecutive_failures} consecutive failure{feed.consecutive_failures > 1 ? 's' : ''}
+          </Text>
+        )}
+      </VStack>
+    </HStack>
+  )
+}
+
+function HealthTab() {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey:      ['admin-health'],
+    queryFn:       adminGetHealth,
+    refetchInterval: 30000,
+  })
+
+  if (isLoading) return <Center py={8}><Spinner color="brand.400" /></Center>
+  if (!data)     return <Text color="red.400">Failed to load health data</Text>
+
+  const { feeds, alert_job, email, alerts_queue, db } = data
+
+  const jobOk   = !!alert_job.last_success && !alert_job.last_error
+  const emailOk = email.sent_failed === 0 || (email.sent_ok / Math.max(email.sent_total, 1)) > 0.9
+
+  const FEED_LABELS = {
+    usgs_earthquakes: 'USGS Earthquakes',
+    usgs_volcanoes:   'USGS Volcanoes (GVP)',
+    usgs_hans:        'USGS HANS (Volcano alerts)',
+    gvp_eruptions:    'GVP Eruption History',
+    noaa_dart:        'NOAA DART Buoys',
+    noaa_vaac:        'NOAA VAAC Ash Advisories',
+  }
+
+  return (
+    <VStack spacing={5} align="stretch">
+
+      {/* Summary cards */}
+      <SimpleGrid columns={4} spacing={3}>
+        <Card bg="gray.800" border="1px solid" borderColor="whiteAlpha.100">
+          <CardBody p={4}>
+            <Text fontSize="2xs" color="gray.500" textTransform="uppercase"
+              letterSpacing="wider">Alert job</Text>
+            <HStack mt={1} spacing={2}>
+              <StatusDot ok={jobOk} />
+              <Text fontSize="xl" fontWeight="700" color="white">
+                {alert_job.runs_ok}/{alert_job.runs_total}
+              </Text>
+            </HStack>
+            <Text fontSize="2xs" color="gray.500">runs ok / total</Text>
+            {alert_job.last_success && (
+              <Text fontSize="2xs" color="gray.600" mt={1}>
+                Last: {new Date(alert_job.last_success).toLocaleTimeString()}
+              </Text>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card bg="gray.800" border="1px solid" borderColor="whiteAlpha.100">
+          <CardBody p={4}>
+            <Text fontSize="2xs" color="gray.500" textTransform="uppercase"
+              letterSpacing="wider">Alerts sent</Text>
+            <HStack mt={1} spacing={2}>
+              <StatusDot ok={emailOk} />
+              <Text fontSize="xl" fontWeight="700" color="white">
+                {email.sent_ok}
+              </Text>
+            </HStack>
+            <Text fontSize="2xs" color="gray.500">
+              {email.sent_failed > 0 ? `${email.sent_failed} failed` : 'No failures'}
+            </Text>
+            {email.last_sent && (
+              <Text fontSize="2xs" color="gray.600" mt={1}>
+                Last: {new Date(email.last_sent).toLocaleTimeString()}
+              </Text>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card bg="gray.800" border="1px solid" borderColor="whiteAlpha.100">
+          <CardBody p={4}>
+            <Text fontSize="2xs" color="gray.500" textTransform="uppercase"
+              letterSpacing="wider">Alerts (24h / 7d)</Text>
+            <Text fontSize="xl" fontWeight="700" color="white" mt={1}>
+              {db?.alerts_last_24h} / {db?.alerts_last_7d}
+            </Text>
+            <Text fontSize="2xs" color="gray.500">
+              {db?.total_alerts_sent} total ever
+            </Text>
+          </CardBody>
+        </Card>
+
+        <Card bg="gray.800" border="1px solid" borderColor="whiteAlpha.100">
+          <CardBody p={4}>
+            <Text fontSize="2xs" color="gray.500" textTransform="uppercase"
+              letterSpacing="wider">Users / Regions</Text>
+            <Text fontSize="xl" fontWeight="700" color="white" mt={1}>
+              {db?.total_users} / {db?.total_regions}
+            </Text>
+            <Text fontSize="2xs" color="gray.500">registered / configured</Text>
+          </CardBody>
+        </Card>
+      </SimpleGrid>
+
+      {/* Feed health */}
+      <Box bg="gray.800" borderRadius="xl" border="1px solid"
+        borderColor="whiteAlpha.100" p={4}>
+        <HStack justify="space-between" mb={3}>
+          <Text fontSize="xs" color="gray.400" textTransform="uppercase"
+            letterSpacing="wider">Data feed health</Text>
+          <Button size="xs" variant="ghost" color="gray.500"
+            onClick={() => refetch()}>↻ Refresh</Button>
+        </HStack>
+        <VStack spacing={0} align="stretch">
+          {Object.entries(feeds).map(([key, feed]) => (
+            <FeedRow key={key} label={FEED_LABELS[key] || key} feed={feed} />
+          ))}
+        </VStack>
+        <Text fontSize="2xs" color="gray.600" mt={3}>
+          ⚠ Feed status resets on container restart — shows current session only
+        </Text>
+      </Box>
+
+      {/* Alert job detail */}
+      <Box bg="gray.800" borderRadius="xl" border="1px solid"
+        borderColor="whiteAlpha.100" p={4}>
+        <Text fontSize="xs" color="gray.400" textTransform="uppercase"
+          letterSpacing="wider" mb={3}>Alert job</Text>
+        <SimpleGrid columns={2} spacing={4}>
+          <VStack align="flex-start" spacing={1}>
+            <Text fontSize="2xs" color="gray.500">Last run</Text>
+            <Text fontSize="sm" color="gray.300">
+              {alert_job.last_run
+                ? new Date(alert_job.last_run).toLocaleString()
+                : '—'}
+            </Text>
+          </VStack>
+          <VStack align="flex-start" spacing={1}>
+            <Text fontSize="2xs" color="gray.500">Last success</Text>
+            <Text fontSize="sm" color="gray.300">
+              {alert_job.last_success
+                ? new Date(alert_job.last_success).toLocaleString()
+                : '—'}
+            </Text>
+          </VStack>
+          <VStack align="flex-start" spacing={1}>
+            <Text fontSize="2xs" color="gray.500">Alerts processed</Text>
+            <Text fontSize="sm" color="gray.300">
+              {alerts_queue.processed_total} total
+            </Text>
+          </VStack>
+          <VStack align="flex-start" spacing={1}>
+            <Text fontSize="2xs" color="gray.500">Last error</Text>
+            <Text fontSize="sm" color={alert_job.last_error ? 'red.400' : 'gray.600'}>
+              {alert_job.last_error?.split('—')[1]?.trim() || 'None'}
+            </Text>
+          </VStack>
+        </SimpleGrid>
+      </Box>
+
+      {/* Email delivery */}
+      <Box bg="gray.800" borderRadius="xl" border="1px solid"
+        borderColor="whiteAlpha.100" p={4}>
+        <Text fontSize="xs" color="gray.400" textTransform="uppercase"
+          letterSpacing="wider" mb={3}>Email delivery</Text>
+        <SimpleGrid columns={3} spacing={4}>
+          <VStack align="flex-start" spacing={0}>
+            <Text fontSize="2xl" fontWeight="700" color="green.400">
+              {email.sent_ok}
+            </Text>
+            <Text fontSize="2xs" color="gray.500">Delivered</Text>
+          </VStack>
+          <VStack align="flex-start" spacing={0}>
+            <Text fontSize="2xl" fontWeight="700"
+              color={email.sent_failed > 0 ? 'red.400' : 'gray.600'}>
+              {email.sent_failed}
+            </Text>
+            <Text fontSize="2xs" color="gray.500">Failed</Text>
+          </VStack>
+          <VStack align="flex-start" spacing={0}>
+            <Text fontSize="2xl" fontWeight="700" color="gray.300">
+              {email.sent_total > 0
+                ? `${Math.round((email.sent_ok / email.sent_total) * 100)}%`
+                : '—'}
+            </Text>
+            <Text fontSize="2xs" color="gray.500">Success rate</Text>
+          </VStack>
+        </SimpleGrid>
+        {email.last_error && (
+          <Text fontSize="xs" color="red.400" mt={3}>
+            Last error: {email.last_error.split('—')[1]?.trim()}
+          </Text>
+        )}
+      </Box>
+
+    </VStack>
+  )
+}
+
 // ── Main Admin page ───────────────────────────────────────────────────────────
+
+// ── Health tab ────────────────────────────────────────────────────────────────
+function StatusDot({ ok, warn }) {
+  const color = ok ? 'green.400' : warn ? 'yellow.400' : 'red.400'
+  return <Box w="8px" h="8px" borderRadius="full" bg={color} flexShrink={0} mt="6px" />
+}
+
+function FeedRow({ label, feed }) {
+  const ok   = !!feed.last_success && feed.consecutive_failures === 0
+  const warn = feed.consecutive_failures > 0 && feed.consecutive_failures < 3
+  const ts   = feed.last_success
+    ? new Date(feed.last_success + 'Z').toLocaleTimeString()
+    : 'Never'
+  return (
+    <HStack justify="space-between" py={2}
+      borderBottom="1px solid" borderColor="whiteAlpha.50">
+      <HStack spacing={3} align="flex-start">
+        <StatusDot ok={ok} warn={warn} />
+        <Text fontSize="sm" color="gray.300">{label}</Text>
+      </HStack>
+      <VStack align="flex-end" spacing={0}>
+        <Text fontSize="xs" color={ok ? 'gray.400' : 'red.400'}>
+          {ok ? `Last OK: ${ts}` : (feed.last_error?.split('—')[1]?.trim() || 'Error')}
+        </Text>
+        {feed.consecutive_failures > 0 && (
+          <Text fontSize="2xs" color="red.400">
+            {feed.consecutive_failures} consecutive failure{feed.consecutive_failures !== 1 ? 's' : ''}
+          </Text>
+        )}
+      </VStack>
+    </HStack>
+  )
+}
+
 export default function Admin() {
   const { data: users }   = useQuery({ queryKey: ['admin-users'],   queryFn: adminGetUsers })
   const { data: regions } = useQuery({ queryKey: ['admin-regions'], queryFn: adminGetRegions })
@@ -491,12 +747,14 @@ export default function Admin() {
                 {t}
               </Tab>
             ))}
+            <Tab>Health</Tab>
           </TabList>
           <TabPanels>
             <TabPanel px={0} pt={6}><UsersTab /></TabPanel>
             <TabPanel px={0} pt={6}><RegionsTab /></TabPanel>
             <TabPanel px={0} pt={6}><SentAlertsTab /></TabPanel>
             <TabPanel px={0} pt={6}><SettingsTab /></TabPanel>
+            <TabPanel px={0}><HealthTab /></TabPanel>
           </TabPanels>
         </Tabs>
       </VStack>

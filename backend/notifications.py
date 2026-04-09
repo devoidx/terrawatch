@@ -5,35 +5,37 @@ import asyncio
 import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from health import health
 
 logger = logging.getLogger(__name__)
 
 
 def get_smtp_config(db=None):
     cfg = {
-        'provider':       'smtp',
-        'host':           os.getenv('SMTP_HOST', ''),
-        'port':           int(os.getenv('SMTP_PORT', '587')),
-        'user':           os.getenv('SMTP_USER', ''),
-        'password':       os.getenv('SMTP_PASSWORD', ''),
-        'from':           os.getenv('SMTP_FROM', ''),
-        'use_tls':        True,
-        'gmail_address':  os.getenv('GMAIL_ADDRESS', ''),
-        'gmail_password': os.getenv('GMAIL_APP_PASSWORD', ''),
+        "provider": "smtp",
+        "host": os.getenv("SMTP_HOST", ""),
+        "port": int(os.getenv("SMTP_PORT", "587")),
+        "user": os.getenv("SMTP_USER", ""),
+        "password": os.getenv("SMTP_PASSWORD", ""),
+        "from": os.getenv("SMTP_FROM", ""),
+        "use_tls": True,
+        "gmail_address": os.getenv("GMAIL_ADDRESS", ""),
+        "gmail_password": os.getenv("GMAIL_APP_PASSWORD", ""),
     }
     if db:
         try:
             from models import Setting
+
             s = {row.key: row.value for row in db.query(Setting).all()}
-            cfg['provider']       = s.get('smtp_provider', 'smtp')
-            cfg['host']           = s.get('smtp_host') or cfg['host']
-            cfg['port']           = int(s.get('smtp_port') or cfg['port'])
-            cfg['user']           = s.get('smtp_user') or cfg['user']
-            cfg['password']       = s.get('smtp_password') or cfg['password']
-            cfg['from']           = s.get('smtp_from') or cfg['from']
-            cfg['use_tls']        = (s.get('smtp_use_tls', 'true')).lower() == 'true'
-            cfg['gmail_address']  = s.get('gmail_address') or cfg['gmail_address']
-            cfg['gmail_password'] = s.get('gmail_app_password') or cfg['gmail_password']
+            cfg["provider"] = s.get("smtp_provider", "smtp")
+            cfg["host"] = s.get("smtp_host") or cfg["host"]
+            cfg["port"] = int(s.get("smtp_port") or cfg["port"])
+            cfg["user"] = s.get("smtp_user") or cfg["user"]
+            cfg["password"] = s.get("smtp_password") or cfg["password"]
+            cfg["from"] = s.get("smtp_from") or cfg["from"]
+            cfg["use_tls"] = (s.get("smtp_use_tls", "true")).lower() == "true"
+            cfg["gmail_address"] = s.get("gmail_address") or cfg["gmail_address"]
+            cfg["gmail_password"] = s.get("gmail_app_password") or cfg["gmail_password"]
         except Exception:
             pass
     return cfg
@@ -41,22 +43,22 @@ def get_smtp_config(db=None):
 
 async def send_email(to_address: str, subject: str, body_html: str, db=None) -> bool:
     cfg = get_smtp_config(db)
-    provider = cfg['provider']
+    provider = cfg["provider"]
 
-    if provider == 'gmail':
-        host     = 'smtp.gmail.com'
-        port     = 587
-        user     = cfg['gmail_address']
-        password = cfg['gmail_password']
+    if provider == "gmail":
+        host = "smtp.gmail.com"
+        port = 587
+        user = cfg["gmail_address"]
+        password = cfg["gmail_password"]
         from_addr = f"TerraWatch <{user}>"
-        use_tls  = True
+        use_tls = True
     else:
-        host     = cfg['host']
-        port     = cfg['port']
-        user     = cfg['user']
-        password = cfg['password']
-        from_addr = cfg['from'] or user
-        use_tls  = cfg['use_tls']
+        host = cfg["host"]
+        port = cfg["port"]
+        user = cfg["user"]
+        password = cfg["password"]
+        from_addr = cfg["from"] or user
+        use_tls = cfg["use_tls"]
 
     if not host or not user:
         logger.warning("Email not configured, skipping")
@@ -64,8 +66,8 @@ async def send_email(to_address: str, subject: str, body_html: str, db=None) -> 
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"]    = from_addr
-    msg["To"]      = to_address
+    msg["From"] = from_addr
+    msg["To"] = to_address
     msg.attach(MIMEText(body_html, "html"))
 
     try:
@@ -78,12 +80,16 @@ async def send_email(to_address: str, subject: str, body_html: str, db=None) -> 
             start_tls=use_tls,
         )
         logger.info(f"Email sent to {to_address} via {provider}")
+        health.email_sent(ok=True)
         return True
     except Exception as e:
         logger.error(f"Email failed: {e}")
+        health.email_sent(ok=False, error=str(e))
         return False
 
+
 # ── Web Push ──────────────────────────────────────────────────────────────────
+
 
 def send_push(subscription: dict, title: str, body: str, url: str = "/") -> bool:
     vapid_private = os.getenv("VAPID_PRIVATE_KEY", "")
@@ -95,6 +101,7 @@ def send_push(subscription: dict, title: str, body: str, url: str = "/") -> bool
 
     try:
         from pywebpush import webpush, WebPushException
+
         payload = json.dumps({"title": title, "body": body, "url": url})
         webpush(
             subscription_info=subscription,
@@ -110,6 +117,7 @@ def send_push(subscription: dict, title: str, body: str, url: str = "/") -> bool
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
+
 
 async def dispatch_alert(
     user_email: str,

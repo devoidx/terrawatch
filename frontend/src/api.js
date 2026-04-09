@@ -41,6 +41,10 @@ export const updateAlertRegion  = (id, d) => api.patch(`/alerts/regions/${id}`, 
 export const deleteAlertRegion  = id => api.delete(`/alerts/regions/${id}`)
 export const getAlertHistory    = () => api.get('/alerts/history').then(r => r.data)
 
+// -- Health Checks ───────────────────────────────────────────────────────────────
+export const adminGetHealth = () =>
+  api.get('/admin/health').then(r => r.data)
+
 // ── Live Data ─────────────────────────────────────────────────────────────────
 export const getEarthquakes = (params) =>
   api.get('/data/earthquakes', { params }).then(r => r.data)
@@ -64,3 +68,6 @@ export const adminUpdateSetting = (key, d) => api.patch(`/admin/settings/${key}`
 
 export const adminUpdateSmtp    = d  => api.patch('/admin/settings/smtp', d).then(r => r.data)
 export const adminTestSmtp      = () => api.post('/admin/settings/smtp/test').then(r => r.data)
+
+export const adminGetHealth = () =>
+  api.get('/admin/health').then(r => r.data)

@@ -2,6 +2,7 @@ import httpx
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from health import health
 
 import models
 import notifications
@@ -13,7 +14,6 @@ USGS_EARTHQUAKE_URL = (
     "?format=geojson&orderby=time&limit=100&minmagnitude=2.5"
     "&starttime={start}"
 )
-USGS_VOLCANO_URL = "https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes"
 
 VOLCANO_LEVEL_ORDER = ["normal", "advisory", "watch", "warning"]
 
@@ -33,6 +33,7 @@ async def fetch_earthquakes() -> list[dict]:
             r = await client.get(url)
             r.raise_for_status()
             features = r.json().get("features", [])
+            health.feed_ok("usgs_earthquakes")
             return [
                 {
                     "id": f["id"],
@@ -48,6 +49,7 @@ async def fetch_earthquakes() -> list[dict]:
                 if f.get("geometry") and f["geometry"].get("coordinates")
             ]
     except Exception as e:
+        health.feed_error("usgs_earthquakes", str(e))
         logger.error(f"Earthquake fetch failed: {e}")
         return []
 
@@ -64,6 +66,9 @@ async def fetch_volcanoes() -> list[dict]:
             )
             r2.raise_for_status()
 
+        health.feed_ok("usgs_volcanoes")
+        health.feed_ok("usgs_hans")
+
         alert_lookup = {}
         for v in r2.json():
             vnum = v.get("vnum")
@@ -72,51 +77,50 @@ async def fetch_volcanoes() -> list[dict]:
 
         results = []
         for v in r1.json():
-            lat  = v.get("latitude")
-            lng  = v.get("longitude")
+            lat = v.get("latitude")
+            lng = v.get("longitude")
             vnum = str(v.get("vnum") or "")
             if lat is None or lng is None:
                 continue
             alert_level = alert_lookup.get(vnum, "normal")
             results.append({
-                "id":          f"volcano-{vnum}",
-                "type":        "volcano",
-                "name":        v.get("vName", "Unknown"),
+                "id": f"volcano-{vnum}",
+                "type": "volcano",
+                "name": v.get("vName", "Unknown"),
                 "alert_level": alert_level,
-                "lat":         float(lat),
-                "lng":         float(lng),
-                "location":    f"{v.get('subregion', '')}, {v.get('country', '')}".strip(", "),
-                "country":     v.get("country", ""),
+                "lat": float(lat),
+                "lng": float(lng),
+                "location": f"{v.get('subregion', '')}, {v.get('country', '')}".strip(", "),
+                "country": v.get("country", ""),
             })
         return results
     except Exception as e:
+        health.feed_error("usgs_volcanoes", str(e))
+        health.feed_error("usgs_hans", str(e))
         logger.error(f"Volcano fetch failed: {e}")
         return []
 
 
 def event_in_region(event: dict, region: models.AlertRegion) -> bool:
     lat, lng = event["lat"], event["lng"]
-    return (
-        float(region.lat_min) <= lat <= float(region.lat_max)
-        and float(region.lng_min) <= lng <= float(region.lng_max)
-    )
+    return float(region.lat_min) <= lat <= float(region.lat_max) and float(
+        region.lng_min
+    ) <= lng <= float(region.lng_max)
 
 
 async def check_and_notify(db: Session):
     earthquakes = await fetch_earthquakes()
-    volcanoes = await fetch_volcanoes()
-    all_events = earthquakes + volcanoes
+    volcanoes   = await fetch_volcanoes()
+    all_events  = earthquakes + volcanoes
 
     if not all_events:
-        return
+        return 0
 
-    # Load all active regions with user + prefs
     regions = (
-        db.query(models.AlertRegion)
-        .filter(models.AlertRegion.is_active == True)
-        .all()
+        db.query(models.AlertRegion).filter(models.AlertRegion.is_active == True).all()
     )
 
+    alerts_sent = 0
     for region in regions:
         user = db.query(models.User).filter(models.User.id == region.user_id).first()
         if not user or not user.is_active:
@@ -126,31 +130,31 @@ async def check_and_notify(db: Session):
             continue
 
         for event in all_events:
-            # Skip if already notified
-            existing = db.query(models.SentAlert).filter_by(
-                user_id=user.id, event_id=event["id"]
-            ).first()
+            existing = (
+                db.query(models.SentAlert)
+                .filter_by(user_id=user.id, event_id=event["id"])
+                .first()
+            )
             if existing:
                 continue
 
             if not event_in_region(event, region):
                 continue
 
-            # Apply threshold filters
             if event["type"] == "earthquake":
                 mag = event.get("magnitude") or 0
                 if mag < float(region.min_earthquake_magnitude):
                     continue
-                subject = f"🌍 TerraWatch: M{mag:.1f} Earthquake — {region.name}"
+                subject    = f"🌍 TerraWatch: M{mag:.1f} Earthquake — {region.name}"
                 email_html = f"""
                 <h2>Earthquake Alert — {region.name}</h2>
                 <p><strong>Magnitude:</strong> {mag}</p>
-                <p><strong>Location:</strong> {event['location']}</p>
-                <p><a href="{event.get('url', '#')}">View on USGS</a></p>
+                <p><strong>Location:</strong> {event["location"]}</p>
+                <p><a href="{event.get("url", "#")}">View on USGS</a></p>
                 """
-                sms_text = f"TerraWatch: M{mag:.1f} earthquake near {region.name}. {event['location']}"
+                sms_text   = f"TerraWatch: M{mag:.1f} earthquake near {region.name}. {event['location']}"
                 push_title = f"M{mag:.1f} Earthquake"
-                push_body = event["location"]
+                push_body  = event["location"]
 
             elif event["type"] == "volcano":
                 if not region.include_volcanoes:
@@ -158,16 +162,16 @@ async def check_and_notify(db: Session):
                 event_level = event.get("alert_level", "advisory")
                 if level_index(event_level) < level_index(region.min_volcano_alert_level):
                     continue
-                subject = f"🌋 TerraWatch: Volcano Alert ({event_level.upper()}) — {region.name}"
+                subject    = f"🌋 TerraWatch: Volcano Alert ({event_level.upper()}) — {region.name}"
                 email_html = f"""
                 <h2>Volcano Alert — {region.name}</h2>
-                <p><strong>Volcano:</strong> {event['name']}</p>
+                <p><strong>Volcano:</strong> {event["name"]}</p>
                 <p><strong>Alert Level:</strong> {event_level.upper()}</p>
-                <p><strong>Location:</strong> {event.get('location', '')}</p>
+                <p><strong>Location:</strong> {event.get("location", "")}</p>
                 """
-                sms_text = f"TerraWatch: {event['name']} at {event_level.upper()} alert near {region.name}"
+                sms_text   = f"TerraWatch: {event['name']} at {event_level.upper()} alert near {region.name}"
                 push_title = f"Volcano: {event['name']}"
-                push_body = f"Alert level: {event_level.upper()}"
+                push_body  = f"Alert level: {event_level.upper()}"
             else:
                 continue
 
@@ -186,6 +190,23 @@ async def check_and_notify(db: Session):
                     channels_used=channels,
                 )
                 db.add(sent)
+                alerts_sent += 1
 
     db.commit()
-    logger.info("Alert check complete")
+    logger.info(f"Alert check complete — {alerts_sent} alerts sent")
+    return alerts_sent
+
+
+async def run_alert_check():
+    health.alert_job_start()
+    try:
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            alerts_sent = await check_and_notify(db)
+            health.alert_job_ok(alerts_sent)
+        finally:
+            db.close()
+    except Exception as e:
+        health.alert_job_error(str(e))
+        logger.error(f"Alert check failed: {e}")

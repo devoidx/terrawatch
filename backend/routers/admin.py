@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
 from typing import Optional
+from health import health as health_store
 
 import models, schemas, auth
 from database import get_db
@@ -185,3 +186,58 @@ def update_smtp_settings(
             db.add(models.Setting(key=key, value=value))
     db.commit()
     return {"message": "Email settings saved"}
+
+from health import health as health_store
+
+@router.get("/health")
+def get_system_health(
+    _: models.User = Depends(auth.require_admin),
+    db: Session = Depends(get_db),
+):
+    """System health dashboard data."""
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
+
+    h = health_store.get()
+
+    # Add DB stats
+    now = datetime.utcnow()
+    h['db'] = {
+        'total_users':        db.query(func.count(models.User.id)).scalar(),
+        'total_regions':      db.query(func.count(models.AlertRegion.id)).scalar(),
+        'total_alerts_sent':  db.query(func.count(models.SentAlert.id)).scalar(),
+        'alerts_last_24h':    db.query(func.count(models.SentAlert.id)).filter(
+            models.SentAlert.notified_at >= now - timedelta(hours=24)
+        ).scalar(),
+        'alerts_last_7d':     db.query(func.count(models.SentAlert.id)).filter(
+            models.SentAlert.notified_at >= now - timedelta(days=7)
+        ).scalar(),
+    }
+
+    return h
+
+@router.get("/health")
+def get_system_health(
+    _: models.User = Depends(auth.require_admin),
+    db: Session = Depends(get_db),
+):
+    """System health dashboard."""
+    from health import health as health_store
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
+
+    h = dict(health_store.get())
+    now = datetime.utcnow()
+
+    h['db'] = {
+        'total_users':       db.query(func.count(models.User.id)).scalar(),
+        'total_regions':     db.query(func.count(models.AlertRegion.id)).scalar(),
+        'total_alerts_sent': db.query(func.count(models.SentAlert.id)).scalar(),
+        'alerts_last_24h':   db.query(func.count(models.SentAlert.id)).filter(
+            models.SentAlert.notified_at >= now - timedelta(hours=24)
+        ).scalar(),
+        'alerts_last_7d':    db.query(func.count(models.SentAlert.id)).filter(
+            models.SentAlert.notified_at >= now - timedelta(days=7)
+        ).scalar(),
+    }
+    return h

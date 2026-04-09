@@ -7,6 +7,7 @@ from typing import Optional
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from fastapi.responses import Response
+from health import health
 
 import auth, models
 
@@ -17,10 +18,12 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 USGS_EQ_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
-USGS_VOLCANO_ELEVATED = "https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes"
-USGS_VOLCANO_MONITORED = "https://volcanoes.usgs.gov/hans-public/api/volcano/getMonitoredVolcanoes"
-
-
+USGS_VOLCANO_ELEVATED = (
+    "https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes"
+)
+USGS_VOLCANO_MONITORED = (
+    "https://volcanoes.usgs.gov/hans-public/api/volcano/getMonitoredVolcanoes"
+)
 
 
 @router.get("/earthquakes")
@@ -69,13 +72,13 @@ async def get_volcanoes(
             r3 = await client.get(
                 "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs",
                 params={
-                    "service":      "WFS",
-                    "version":      "2.0.0",
-                    "request":      "GetFeature",
-                    "typeNames":    "GVP-VOTW:E3WebApp_Eruptions1960",
+                    "service": "WFS",
+                    "version": "2.0.0",
+                    "request": "GetFeature",
+                    "typeNames": "GVP-VOTW:E3WebApp_Eruptions1960",
                     "outputFormat": "application/json",
-                    "CQL_FILTER":   "ContinuingEruption='True'",
-                }
+                    "CQL_FILTER": "ContinuingEruption='True'",
+                },
             )
 
         # Build alert status lookup keyed by vnum — US volcanoes from HANS
@@ -85,7 +88,7 @@ async def get_volcanoes(
             if vnum:
                 alert_lookup[str(vnum)] = {
                     "alert_level": (v.get("alert_level") or "NORMAL").lower(),
-                    "color_code":  (v.get("color_code")  or "GREEN").lower(),
+                    "color_code": (v.get("color_code") or "GREEN").lower(),
                 }
 
         # Build continuing eruption set from GVP — for non-US volcanoes
@@ -98,8 +101,8 @@ async def get_volcanoes(
 
         results = []
         for v in r1.json():
-            lat  = v.get("latitude")
-            lng  = v.get("longitude")
+            lat = v.get("latitude")
+            lng = v.get("longitude")
             vnum = str(v.get("vnum") or "")
             if lat is None or lng is None:
                 continue
@@ -111,40 +114,45 @@ async def get_volcanoes(
                 # Non-US with active continuing eruption from GVP
                 status = {
                     "alert_level": "warning",
-                    "color_code":  "red",
+                    "color_code": "red",
                 }
             else:
                 status = {
                     "alert_level": "normal",
-                    "color_code":  "green",
+                    "color_code": "green",
                 }
 
             alert_level = status["alert_level"]
             if elevated_only and alert_level == "normal":
                 continue
 
-            results.append({
-                "id":          f"volcano-{vnum}",
-                "name":        v.get("vName", "Unknown"),
-                "lat":         float(lat),
-                "lng":         float(lng),
-                "alert_level": alert_level,
-                "color_code":  status["color_code"],
-                "location":    f"{v.get('subregion', '')}, {v.get('country', '')}".strip(", "),
-                "vnum":        vnum,
-                "country":     v.get("country", ""),
-            })
-
+            results.append(
+                {
+                    "id": f"volcano-{vnum}",
+                    "name": v.get("vName", "Unknown"),
+                    "lat": float(lat),
+                    "lng": float(lng),
+                    "alert_level": alert_level,
+                    "color_code": status["color_code"],
+                    "location": f"{v.get('subregion', '')}, {v.get('country', '')}".strip(
+                        ", "
+                    ),
+                    "vnum": vnum,
+                    "country": v.get("country", ""),
+                }
+            )
+        health.feed_ok("usgs_volcanoes")
         return {"volcanoes": results, "count": len(results)}
     except httpx.HTTPError as e:
         logger.error(f"Volcano fetch error: {e}")
-        raise HTTPException(502, "Failed to fetch volcano data from USGS") 
-    
+        health.feed_error("usgs_volcanoes", str(e))
+        raise HTTPException(502, "Failed to fetch volcano data from USGS")
+
+
 @router.get("/dart-buoys")
 @limiter.limit("30/minute")
-
-async def get_dart_buoys(request: Request,
-    
+async def get_dart_buoys(
+    request: Request,
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Fetch and parse NOAA DART buoy station list."""
@@ -156,40 +164,43 @@ async def get_dart_buoys(request: Request,
             r.raise_for_status()
 
         stations = []
-        for line in r.text.split('\n'):
-            if not line.strip() or line.startswith('#'):
+        for line in r.text.split("\n"):
+            if not line.strip() or line.startswith("#"):
                 continue
-            if 'dart' not in line.lower():
+            if "dart" not in line.lower():
                 continue
 
             # Parse coordinates: "30.487 N 152.124 E"
             import re
-            coord = re.search(
-                r'(-?\d+\.?\d*)\s+([NS])\s+(-?\d+\.?\d*)\s+([EW])', line
-            )
+
+            coord = re.search(r"(-?\d+\.?\d*)\s+([NS])\s+(-?\d+\.?\d*)\s+([EW])", line)
             if not coord:
                 continue
 
-            lat = float(coord.group(1)) * (-1 if coord.group(2) == 'S' else 1)
-            lng = float(coord.group(3)) * (-1 if coord.group(4) == 'W' else 1)
-            parts = line.split('|')
-            sid  = parts[0].strip() if parts else ''
-            name = parts[4].strip()[:60] if len(parts) > 4 else 'DART Buoy'
+            lat = float(coord.group(1)) * (-1 if coord.group(2) == "S" else 1)
+            lng = float(coord.group(3)) * (-1 if coord.group(4) == "W" else 1)
+            parts = line.split("|")
+            sid = parts[0].strip() if parts else ""
+            name = parts[4].strip()[:60] if len(parts) > 4 else "DART Buoy"
 
             if sid and not (lat == 0 and lng == 0):
-                stations.append({
-                    'id':   sid,
-                    'name': name,
-                    'lat':  lat,
-                    'lng':  lng,
-                })
-
-        return {'stations': stations, 'count': len(stations)}
+                stations.append(
+                    {
+                        "id": sid,
+                        "name": name,
+                        "lat": lat,
+                        "lng": lng,
+                    }
+                )
+        health.feed_ok("dart_buoys")
+        return {"stations": stations, "count": len(stations)}
 
     except httpx.HTTPError as e:
         logger.error(f"DART buoy fetch error: {e}")
+        health.feed_error("dart_buoys", str(e))
         raise HTTPException(502, "Failed to fetch DART buoy data from NOAA")
-    
+
+
 @router.get("/dart-buoy/{station_id}")
 async def get_dart_buoy_detail(
     station_id: str,
@@ -206,7 +217,7 @@ async def get_dart_buoy_detail(
             r.raise_for_status()
 
         readings = []
-        lines = [l for l in r.text.split('\n') if l.strip() and not l.startswith('#')]
+        lines = [l for l in r.text.split("\n") if l.strip() and not l.startswith("#")]
 
         for line in lines[:96]:  # 96 x 15min = 24 hours
             parts = line.split()
@@ -215,10 +226,12 @@ async def get_dart_buoy_detail(
             try:
                 yr, mo, dy, hr, mn = parts[0], parts[1], parts[2], parts[3], parts[4]
                 height = float(parts[7])
-                readings.append({
-                    "time":   f"{yr}-{mo}-{dy} {hr}:{mn} UTC",
-                    "height": height,
-                })
+                readings.append(
+                    {
+                        "time": f"{yr}-{mo}-{dy} {hr}:{mn} UTC",
+                        "height": height,
+                    }
+                )
             except (ValueError, IndexError):
                 continue
 
@@ -227,13 +240,14 @@ async def get_dart_buoy_detail(
 
         return {
             "station_id": station_id,
-            "status":     "ok",
-            "readings":   readings,  # newest first
+            "status": "ok",
+            "readings": readings,  # newest first
         }
 
     except Exception as e:
         logger.error(f"DART buoy detail error for {station_id}: {e}")
         return {"station_id": station_id, "status": "error", "readings": []}
+
 
 @router.get("/earthquakes/stats")
 async def earthquake_stats(
@@ -271,9 +285,10 @@ async def earthquake_stats(
     except httpx.HTTPError as e:
         logger.error(f"Stats fetch error: {e}")
         raise HTTPException(502, "Failed to fetch stats from USGS")
-    
+
+
 @router.get("/active-faults")
-@limiter.limit("10/hour")   # expensive — proxies 10MB from GitHub
+@limiter.limit("10/hour")  # expensive — proxies 10MB from GitHub
 async def get_active_faults(
     request: Request,
     current_user: models.User = Depends(auth.get_current_user),
@@ -292,31 +307,33 @@ async def get_active_faults(
         simplified_features = []
         for f in data.get("features", []):
             props = f.get("properties", {})
-            simplified_features.append({
-                "type": "Feature",
-                "geometry": f.get("geometry"),
-                "properties": {
-                    "name":       props.get("name", ""),
-                    "slip_type":  props.get("slip_type", ""),
-                    "slip_rate":  props.get("slip_rate_preferred", ""),
-                    "country":    props.get("country", ""),
+            simplified_features.append(
+                {
+                    "type": "Feature",
+                    "geometry": f.get("geometry"),
+                    "properties": {
+                        "name": props.get("name", ""),
+                        "slip_type": props.get("slip_type", ""),
+                        "slip_rate": props.get("slip_rate_preferred", ""),
+                        "country": props.get("country", ""),
+                    },
                 }
-            })
+            )
 
         return {
-            "type":     "FeatureCollection",
+            "type": "FeatureCollection",
             "features": simplified_features,
         }
 
     except httpx.HTTPError as e:
         logger.error(f"Active faults fetch error: {e}")
         raise HTTPException(502, "Failed to fetch active faults data")
-    
+
+
 @router.get("/vaac-advisories")
 @limiter.limit("20/hour")
-
-async def get_vaac_advisories(request: Request,
-    
+async def get_vaac_advisories(
+    request: Request,
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Fetch and parse current volcanic ash advisories from NOAA Washington VAAC."""
@@ -334,14 +351,14 @@ async def get_vaac_advisories(request: Request,
         # Extract XML URLs from page - get the most recent per volcano
         xml_urls = re.findall(
             r'https://www\.ospo\.noaa\.gov/products/atmosphere/vaac/volcanoes/xml_files/[^"]+\.xml',
-            page.text
+            page.text,
         )
 
         # Deduplicate by volcano (keep first/most recent per filename prefix)
         seen_volcanoes = set()
         unique_urls = []
         for url in xml_urls:
-            filename = url.split('/')[-1]
+            filename = url.split("/")[-1]
             # FVXX20, FVXX21 etc are volcano codes
             code = filename[:6]
             if code not in seen_volcanoes:
@@ -361,88 +378,103 @@ async def get_vaac_advisories(request: Request,
 
                     root = ET.fromstring(r.text)
                     ns = {
-                        'iwxxm': 'http://icao.int/iwxxm/3.0',
-                        'gml':   'http://www.opengis.net/gml/3.2',
+                        "iwxxm": "http://icao.int/iwxxm/3.0",
+                        "gml": "http://www.opengis.net/gml/3.2",
                     }
 
                     def find_text(el, path):
                         found = el.find(path, ns)
-                        return found.text.strip() if found is not None and found.text else ''
+                        return (
+                            found.text.strip()
+                            if found is not None and found.text
+                            else ""
+                        )
 
                     # Volcano info
-                    vol_el    = root.find('.//iwxxm:EruptingVolcano', ns)
+                    vol_el = root.find(".//iwxxm:EruptingVolcano", ns)
                     if vol_el is None:
                         continue
 
-                    vol_name  = find_text(vol_el, 'iwxxm:name').split(' ')[0]
-                    pos_text  = find_text(vol_el, './/gml:pos')
-                    region    = find_text(root, './/iwxxm:stateOrRegion')
-                    eruption  = find_text(root, './/iwxxm:eruptionDetails')
-                    issue_time = find_text(root, './/iwxxm:issueTime//gml:timePosition')
-                    elev      = find_text(vol_el, 'iwxxm:summitElevation')
+                    vol_name = find_text(vol_el, "iwxxm:name").split(" ")[0]
+                    pos_text = find_text(vol_el, ".//gml:pos")
+                    region = find_text(root, ".//iwxxm:stateOrRegion")
+                    eruption = find_text(root, ".//iwxxm:eruptionDetails")
+                    issue_time = find_text(root, ".//iwxxm:issueTime//gml:timePosition")
+                    elev = find_text(vol_el, "iwxxm:summitElevation")
 
                     if not pos_text:
                         continue
                     lat, lng = [float(x) for x in pos_text.split()]
 
                     def parse_polygon(el):
-                        pos = el.find('.//gml:posList', ns)
+                        pos = el.find(".//gml:posList", ns)
                         if pos is None or not pos.text:
                             return None
                         coords = [float(x) for x in pos.text.strip().split()]
                         # GML is lat lng pairs, GeoJSON needs [lng, lat]
-                        pairs = [[coords[i+1], coords[i]] for i in range(0, len(coords)-1, 2)]
+                        pairs = [
+                            [coords[i + 1], coords[i]]
+                            for i in range(0, len(coords) - 1, 2)
+                        ]
                         if pairs and pairs[0] != pairs[-1]:
                             pairs.append(pairs[0])
                         return pairs
 
                     # Observed ash cloud
-                    obs_el  = root.find('.//iwxxm:observation', ns)
+                    obs_el = root.find(".//iwxxm:observation", ns)
                     obs_poly = None
-                    obs_upper = ''
-                    obs_lower = ''
+                    obs_upper = ""
+                    obs_lower = ""
                     if obs_el is not None:
-                        obs_poly  = parse_polygon(obs_el)
-                        obs_upper = find_text(obs_el, './/iwxxm:upperLimit')
-                        obs_lower = find_text(obs_el, './/iwxxm:lowerLimit')
+                        obs_poly = parse_polygon(obs_el)
+                        obs_upper = find_text(obs_el, ".//iwxxm:upperLimit")
+                        obs_lower = find_text(obs_el, ".//iwxxm:lowerLimit")
 
                     # Forecast polygons (6h, 12h, 18h)
                     forecasts = []
-                    for fc in root.findall('.//iwxxm:forecast', ns):
-                        fc_time = find_text(fc, './/gml:timePosition')
+                    for fc in root.findall(".//iwxxm:forecast", ns):
+                        fc_time = find_text(fc, ".//gml:timePosition")
                         fc_poly = parse_polygon(fc)
-                        no_ash  = fc.find('.//iwxxm:noVolcanicAshExpected', ns) is not None
+                        no_ash = (
+                            fc.find(".//iwxxm:noVolcanicAshExpected", ns) is not None
+                        )
                         if fc_poly or no_ash:
-                            forecasts.append({
-                                'time':   fc_time,
-                                'polygon': fc_poly,
-                                'no_ash': no_ash,
-                            })
+                            forecasts.append(
+                                {
+                                    "time": fc_time,
+                                    "polygon": fc_poly,
+                                    "no_ash": no_ash,
+                                }
+                            )
 
-                    advisories.append({
-                        'volcano':    vol_name,
-                        'region':     region,
-                        'lat':        lat,
-                        'lng':        lng,
-                        'elevation':  elev,
-                        'eruption':   eruption,
-                        'issue_time': issue_time,
-                        'obs_polygon': obs_poly,
-                        'obs_upper':  obs_upper,
-                        'obs_lower':  obs_lower,
-                        'forecasts':  forecasts,
-                    })
+                    advisories.append(
+                        {
+                            "volcano": vol_name,
+                            "region": region,
+                            "lat": lat,
+                            "lng": lng,
+                            "elevation": elev,
+                            "eruption": eruption,
+                            "issue_time": issue_time,
+                            "obs_polygon": obs_poly,
+                            "obs_upper": obs_upper,
+                            "obs_lower": obs_lower,
+                            "forecasts": forecasts,
+                        }
+                    )
 
                 except Exception as e:
                     logger.warning(f"Failed to parse VAAC XML {url}: {e}")
                     continue
-
-        return {'advisories': advisories, 'count': len(advisories)}
+        health.feed_ok("vaac_advisories")
+        return {"advisories": advisories, "count": len(advisories)}
 
     except Exception as e:
         logger.error(f"VAAC advisories error: {e}")
+        health.feed_error("vaac_advisories", str(e))
         raise HTTPException(502, "Failed to fetch VAAC advisories")
-    
+
+
 @router.get("/volcano/{vnum}")
 async def get_volcano_detail(
     vnum: str,
@@ -450,22 +482,22 @@ async def get_volcano_detail(
 ):
     import re
     from datetime import datetime, timedelta
+
     results = {}
 
     async with httpx.AsyncClient(timeout=20) as client:
-
         # ── GVP volcano profile ───────────────────────────────────────────
         try:
             r = await client.get(
                 "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs",
                 params={
-                    "service":     "WFS",
-                    "version":     "2.0.0",
-                    "request":     "GetFeature",
-                    "typeNames":   "GVP-VOTW:E3WebApp_HoloceneVolcanoes",
-                    "outputFormat":"application/json",
-                    "CQL_FILTER":  f"VolcanoNumber={vnum}",
-                }
+                    "service": "WFS",
+                    "version": "2.0.0",
+                    "request": "GetFeature",
+                    "typeNames": "GVP-VOTW:E3WebApp_HoloceneVolcanoes",
+                    "outputFormat": "application/json",
+                    "CQL_FILTER": f"VolcanoNumber={vnum}",
+                },
             )
             if r.status_code == 200:
                 feats = r.json().get("features", [])
@@ -474,26 +506,30 @@ async def get_volcano_detail(
                     # Build image URL if available
                     img = p.get("VPImageFileName")
                     img_url = None  # GVP blocks all server-side and cross-origin image requests
-                    img_page = f"https://volcano.si.edu/gallery/ShowImage.cfm?photo={img}" if img else None
+                    img_page = (
+                        f"https://volcano.si.edu/gallery/ShowImage.cfm?photo={img}"
+                        if img
+                        else None
+                    )
                     results["profile"] = {
-                        "name":           p.get("VolcanoName"),
-                        "country":        p.get("Country"),
-                        "description":    p.get("Remarks", ""),
-                        "type":           p.get("VolcanoType", ""),
-                        "last_eruption":  p.get("LastEruption"),
-                        "elevation":      p.get("Elevation"),
-                        "tectonic":       p.get("TectonicSetting"),
-                        "pop_5km":        p.get("Within_5km"),
-                        "pop_10km":       p.get("Within_10km"),
-                        "pop_30km":       p.get("Within_30km"),
-                        "pop_100km":      p.get("Within_100km"),
-                        "image_url":     None,
-                        "image_page":    img_page,
-                        "image_caption":  p.get("VPImageCaption"),
-                        "image_credit":   p.get("VPImageCredit"),
-                        "lat":            p.get("LatitudeDecimal"),
-                        "lng":            p.get("LongitudeDecimal"),
-                        "gvp_url":        f"https://volcano.si.edu/volcano.cfm?vn={vnum}",
+                        "name": p.get("VolcanoName"),
+                        "country": p.get("Country"),
+                        "description": p.get("Remarks", ""),
+                        "type": p.get("VolcanoType", ""),
+                        "last_eruption": p.get("LastEruption"),
+                        "elevation": p.get("Elevation"),
+                        "tectonic": p.get("TectonicSetting"),
+                        "pop_5km": p.get("Within_5km"),
+                        "pop_10km": p.get("Within_10km"),
+                        "pop_30km": p.get("Within_30km"),
+                        "pop_100km": p.get("Within_100km"),
+                        "image_url": None,
+                        "image_page": img_page,
+                        "image_caption": p.get("VPImageCaption"),
+                        "image_credit": p.get("VPImageCredit"),
+                        "lat": p.get("LatitudeDecimal"),
+                        "lng": p.get("LongitudeDecimal"),
+                        "gvp_url": f"https://volcano.si.edu/volcano.cfm?vn={vnum}",
                     }
         except Exception as e:
             logger.warning(f"GVP profile error for {vnum}: {e}")
@@ -503,27 +539,28 @@ async def get_volcano_detail(
             r = await client.get(
                 "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/wfs",
                 params={
-                    "service":     "WFS",
-                    "version":     "2.0.0",
-                    "request":     "GetFeature",
-                    "typeNames":   "GVP-VOTW:E3WebApp_Eruptions1960",
-                    "outputFormat":"application/json",
-                    "CQL_FILTER":  f"VolcanoNumber={vnum}",
-                    "sortBy":      "StartDateYear D",
-                }
+                    "service": "WFS",
+                    "version": "2.0.0",
+                    "request": "GetFeature",
+                    "typeNames": "GVP-VOTW:E3WebApp_Eruptions1960",
+                    "outputFormat": "application/json",
+                    "CQL_FILTER": f"VolcanoNumber={vnum}",
+                    "sortBy": "StartDateYear D",
+                },
             )
             if r.status_code == 200:
                 feats = r.json().get("features", [])
                 results["eruptions"] = [
                     {
-                        "start_year":  f["properties"].get("StartDateYear"),
+                        "start_year": f["properties"].get("StartDateYear"),
                         "start_month": f["properties"].get("StartDateMonth"),
-                        "start_day":   f["properties"].get("StartDateDay"),
-                        "end_year":    f["properties"].get("EndDateYear"),
-                        "end_month":   f["properties"].get("EndDateMonth"),
-                        "end_day":     f["properties"].get("EndDateDay"),
-                        "vei":         f["properties"].get("ExplosivityIndexMax"),
-                        "continuing":  f["properties"].get("ContinuingEruption") == "True",
+                        "start_day": f["properties"].get("StartDateDay"),
+                        "end_year": f["properties"].get("EndDateYear"),
+                        "end_month": f["properties"].get("EndDateMonth"),
+                        "end_day": f["properties"].get("EndDateDay"),
+                        "vei": f["properties"].get("ExplosivityIndexMax"),
+                        "continuing": f["properties"].get("ContinuingEruption")
+                        == "True",
                     }
                     for f in feats
                 ]
@@ -537,29 +574,31 @@ async def get_volcano_detail(
             lat = profile.get("lat")
             lng = profile.get("lng")
             if lat and lng:
-                start = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S")
+                start = (datetime.utcnow() - timedelta(days=30)).strftime(
+                    "%Y-%m-%dT%H:%M:%S"
+                )
                 r = await client.get(
                     "https://earthquake.usgs.gov/fdsnws/event/1/query",
                     params={
-                        "format":       "geojson",
-                        "latitude":     lat,
-                        "longitude":    lng,
-                        "maxradiuskm":  100,
+                        "format": "geojson",
+                        "latitude": lat,
+                        "longitude": lng,
+                        "maxradiuskm": 100,
                         "minmagnitude": 2.5,
-                        "starttime":    start,
-                        "orderby":      "time",
-                        "limit":        20,
-                    }
+                        "starttime": start,
+                        "orderby": "time",
+                        "limit": 20,
+                    },
                 )
                 if r.status_code == 200:
                     feats = r.json().get("features", [])
                     results["nearby_earthquakes"] = [
                         {
                             "magnitude": f["properties"].get("mag"),
-                            "place":     f["properties"].get("place"),
-                            "time":      f["properties"].get("time"),
-                            "depth":     f["geometry"]["coordinates"][2],
-                            "url":       f["properties"].get("url"),
+                            "place": f["properties"].get("place"),
+                            "time": f["properties"].get("time"),
+                            "depth": f["geometry"]["coordinates"][2],
+                            "url": f["properties"].get("url"),
                         }
                         for f in feats
                     ]
@@ -574,14 +613,13 @@ async def get_volcano_detail(
             if r.status_code == 200:
                 d = r.json()
                 webcam_links = re.findall(
-                    r'href="(https?://[^"]+webcam[^"]*)"',
-                    d.get("boilerplate", "")
+                    r'href="(https?://[^"]+webcam[^"]*)"', d.get("boilerplate", "")
                 )
                 results["monitoring"] = {
-                    "observatory":  d.get("obs_fullname"),
-                    "obs_abbr":     d.get("obs_abbr"),
-                    "volcano_url":  d.get("volcano_url"),
-                    "image_url":    d.get("volcano_image_url"),
+                    "observatory": d.get("obs_fullname"),
+                    "obs_abbr": d.get("obs_abbr"),
+                    "volcano_url": d.get("volcano_url"),
+                    "image_url": d.get("volcano_image_url"),
                     "nvews_threat": d.get("nvews_threat"),
                     "webcam_links": webcam_links,
                 }
@@ -596,13 +634,13 @@ async def get_volcano_detail(
             if r.status_code == 200:
                 d = r.json()
                 results["latest_notice"] = {
-                    "title":       d.get("noticeTitle"),
-                    "type":        d.get("noticeType"),
-                    "sent":        d.get("sentUtc"),
+                    "title": d.get("noticeTitle"),
+                    "type": d.get("noticeType"),
+                    "sent": d.get("sentUtc"),
                     "alert_level": d.get("noticeHighestAlertLevel"),
-                    "color_code":  d.get("noticeHighestColorCode"),
-                    "url":         d.get("noticeUrl"),
-                    "html":        d.get("noticeHtml", "")[:2000],
+                    "color_code": d.get("noticeHighestColorCode"),
+                    "url": d.get("noticeUrl"),
+                    "html": d.get("noticeHtml", "")[:2000],
                 }
         except Exception as e:
             logger.warning(f"HANS notice error for {vnum}: {e}")
@@ -610,24 +648,24 @@ async def get_volcano_detail(
     return results
 
 
-
 @router.get("/volcano-image/{image_id}")
 async def get_volcano_image(image_id: str):
     """Proxy GVP volcano images — public endpoint."""
     import re
-    if not re.match(r'^GVP-\d+$', image_id):
+
+    if not re.match(r"^GVP-\d+$", image_id):
         raise HTTPException(400, "Invalid image ID")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(
                 f"https://volcano.si.edu/gallery/photos/{image_id}.jpg",
-                headers={"Referer": "https://volcano.si.edu/"}
+                headers={"Referer": "https://volcano.si.edu/"},
             )
             if r.status_code == 200:
                 return Response(
                     content=r.content,
                     media_type="image/jpeg",
-                    headers={"Cache-Control": "public, max-age=86400"}
+                    headers={"Cache-Control": "public, max-age=86400"},
                 )
             raise HTTPException(404, "Image not found")
     except HTTPException:
