@@ -453,26 +453,29 @@ function StatusDot({ ok, warn }) {
 }
 
 function FeedRow({ label, feed }) {
+  const neverPolled = !feed.last_success && feed.consecutive_failures === 0
   const ok   = !!feed.last_success && feed.consecutive_failures === 0
   const warn = feed.consecutive_failures > 0 && feed.consecutive_failures < 3
   const ts   = feed.last_success
-    ? new Date(feed.last_success).toLocaleTimeString()
+    ? new Date(feed.last_success + 'Z').toLocaleTimeString()
     : 'Never'
-
   return (
     <HStack justify="space-between" py={2}
       borderBottom="1px solid" borderColor="whiteAlpha.50">
-      <HStack spacing={3}>
-        <StatusDot ok={ok} warn={warn} />
-        <Text fontSize="sm" color="gray.300">{label}</Text>
+      <HStack spacing={3} align="flex-start">
+        {neverPolled
+          ? <Box w="8px" h="8px" borderRadius="full" bg="gray.600" flexShrink={0} mt="6px" />
+          : <StatusDot ok={ok} warn={warn} />
+        }
+        <Text fontSize="sm" color={neverPolled ? 'gray.500' : 'gray.300'}>{label}</Text>
       </HStack>
       <VStack align="flex-end" spacing={0}>
-        <Text fontSize="xs" color={ok ? 'gray.400' : 'red.400'}>
-          {ok ? `Last OK: ${ts}` : feed.last_error?.split('—')[1]?.trim() || 'Error'}
+        <Text fontSize="xs" color={neverPolled ? 'gray.600' : ok ? 'gray.400' : 'red.400'}>
+          {neverPolled ? 'Not yet polled' : ok ? `Last OK: ${ts}` : (feed.last_error?.split('—')[1]?.trim() || 'Error')}
         </Text>
         {feed.consecutive_failures > 0 && (
           <Text fontSize="2xs" color="red.400">
-            {feed.consecutive_failures} consecutive failure{feed.consecutive_failures > 1 ? 's' : ''}
+            {feed.consecutive_failures} consecutive failure{feed.consecutive_failures !== 1 ? 's' : ''}
           </Text>
         )}
       </VStack>
@@ -671,39 +674,6 @@ function HealthTab() {
 
 // ── Main Admin page ───────────────────────────────────────────────────────────
 
-// ── Health tab ────────────────────────────────────────────────────────────────
-function StatusDot({ ok, warn }) {
-  const color = ok ? 'green.400' : warn ? 'yellow.400' : 'red.400'
-  return <Box w="8px" h="8px" borderRadius="full" bg={color} flexShrink={0} mt="6px" />
-}
-
-function FeedRow({ label, feed }) {
-  const ok   = !!feed.last_success && feed.consecutive_failures === 0
-  const warn = feed.consecutive_failures > 0 && feed.consecutive_failures < 3
-  const ts   = feed.last_success
-    ? new Date(feed.last_success + 'Z').toLocaleTimeString()
-    : 'Never'
-  return (
-    <HStack justify="space-between" py={2}
-      borderBottom="1px solid" borderColor="whiteAlpha.50">
-      <HStack spacing={3} align="flex-start">
-        <StatusDot ok={ok} warn={warn} />
-        <Text fontSize="sm" color="gray.300">{label}</Text>
-      </HStack>
-      <VStack align="flex-end" spacing={0}>
-        <Text fontSize="xs" color={ok ? 'gray.400' : 'red.400'}>
-          {ok ? `Last OK: ${ts}` : (feed.last_error?.split('—')[1]?.trim() || 'Error')}
-        </Text>
-        {feed.consecutive_failures > 0 && (
-          <Text fontSize="2xs" color="red.400">
-            {feed.consecutive_failures} consecutive failure{feed.consecutive_failures !== 1 ? 's' : ''}
-          </Text>
-        )}
-      </VStack>
-    </HStack>
-  )
-}
-
 export default function Admin() {
   const { data: users }   = useQuery({ queryKey: ['admin-users'],   queryFn: adminGetUsers })
   const { data: regions } = useQuery({ queryKey: ['admin-regions'], queryFn: adminGetRegions })
@@ -741,20 +711,19 @@ export default function Admin() {
         {/* Tabs */}
         <Tabs variant="line" colorScheme="brand">
           <TabList borderColor="whiteAlpha.100">
-            {['Users', 'Alert Regions', 'Sent Alerts', 'Settings'].map(t => (
+            {['Users', 'Alert Regions', 'Sent Alerts', 'Settings', 'Health '].map(t => (
               <Tab key={t} fontSize="sm" color="gray.400"
                 _selected={{ color: 'brand.300', borderColor: 'brand.300' }}>
                 {t}
               </Tab>
             ))}
-            <Tab>Health</Tab>
           </TabList>
           <TabPanels>
             <TabPanel px={0} pt={6}><UsersTab /></TabPanel>
             <TabPanel px={0} pt={6}><RegionsTab /></TabPanel>
             <TabPanel px={0} pt={6}><SentAlertsTab /></TabPanel>
             <TabPanel px={0} pt={6}><SettingsTab /></TabPanel>
-            <TabPanel px={0}><HealthTab /></TabPanel>
+            <TabPanel px={0} pt={6}><HealthTab /></TabPanel>
           </TabPanels>
         </Tabs>
       </VStack>

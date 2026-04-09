@@ -69,5 +69,3 @@ export const adminUpdateSetting = (key, d) => api.patch(`/admin/settings/${key}`
 export const adminUpdateSmtp    = d  => api.patch('/admin/settings/smtp', d).then(r => r.data)
 export const adminTestSmtp      = () => api.post('/admin/settings/smtp/test').then(r => r.data)
 
-export const adminGetHealth = () =>
-  api.get('/admin/health').then(r => r.data)

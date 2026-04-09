@@ -192,12 +192,12 @@ async def get_dart_buoys(
                         "lng": lng,
                     }
                 )
-        health.feed_ok("dart_buoys")
+        health.feed_ok("noaa_dart")
         return {"stations": stations, "count": len(stations)}
 
     except httpx.HTTPError as e:
         logger.error(f"DART buoy fetch error: {e}")
-        health.feed_error("dart_buoys", str(e))
+        health.feed_error("noaa_dart", str(e))
         raise HTTPException(502, "Failed to fetch DART buoy data from NOAA")
 
 
@@ -466,12 +466,12 @@ async def get_vaac_advisories(
                 except Exception as e:
                     logger.warning(f"Failed to parse VAAC XML {url}: {e}")
                     continue
-        health.feed_ok("vaac_advisories")
+        health.feed_ok("noaa_vaac")
         return {"advisories": advisories, "count": len(advisories)}
 
     except Exception as e:
         logger.error(f"VAAC advisories error: {e}")
-        health.feed_error("vaac_advisories", str(e))
+        health.feed_error("noaa_vaac", str(e))
         raise HTTPException(502, "Failed to fetch VAAC advisories")
 
 
@@ -550,6 +550,7 @@ async def get_volcano_detail(
             )
             if r.status_code == 200:
                 feats = r.json().get("features", [])
+                health.feed_ok("gvp_eruptions")
                 results["eruptions"] = [
                     {
                         "start_year": f["properties"].get("StartDateYear"),
@@ -566,6 +567,7 @@ async def get_volcano_detail(
                 ]
         except Exception as e:
             logger.warning(f"GVP eruptions error for {vnum}: {e}")
+            health.feed_error("gvp_eruptions", str(e))
             results["eruptions"] = []
 
         # ── Nearby earthquakes (USGS, last 30 days, within 100km) ─────────
