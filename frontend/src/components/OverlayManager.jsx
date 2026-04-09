@@ -47,10 +47,15 @@ export default function OverlayManager({ map, earthquakeData, onActiveChange }) 
   }
 
   useEffect(() => {
+    // Reset all overlay state when map instance changes
+    setActive({})
+    setLoading({})
+    layerRefs.current = {}
     return () => {
       Object.values(layerRefs.current).forEach(layer => {
         try { map?.removeLayer(layer) } catch {}
       })
+      layerRefs.current = {}
     }
   }, [map])
 
