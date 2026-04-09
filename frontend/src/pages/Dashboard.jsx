@@ -93,9 +93,8 @@ export default function Dashboard() {
   }
 
   const handleReset = useCallback(() => {
-    const map = mapInstance
-    if (map) map.flyTo([20, 0], 3, { duration: 1.2 })
-  }, [])
+    if (mapInstance) mapInstance.flyTo([20, 0], 3, { duration: 1.2 })
+  }, [mapInstance])
 
   const handleMapReady = useCallback((mapInst) => {
     setMapInstance(mapInst)
@@ -103,33 +102,30 @@ export default function Dashboard() {
 
   const handleEarthquakeSelect = useCallback((feature) => {
     const [lng, lat] = feature.geometry.coordinates
-    const map = mapInstance
-    if (!map) return
-    map.flyTo([lat, lng], 7, { duration: 1.2 })
-    // Flash a highlight ring at the location
+    if (!mapInstance) return
+    mapInstance.flyTo([lat, lng], 7, { duration: 1.2 })
     const mag = feature.properties.mag || 0
     const color = mag >= 7 ? '#9b2c2c' : mag >= 6 ? '#f56565' :
       mag >= 5 ? '#ed8936' : mag >= 4 ? '#ecc94b' : '#48bb78'
     const ring = L.circleMarker([lat, lng], {
       radius: 30, fillColor: 'transparent',
       color, weight: 3, opacity: 1,
-    }).addTo(map)
-    setTimeout(() => map.removeLayer(ring), 2500)
-  }, [])
+    }).addTo(mapInstance)
+    setTimeout(() => mapInstance.removeLayer(ring), 2500)
+  }, [mapInstance])
 
   const handleVolcanoSelect = useCallback((volcano) => {
-    const map = mapInstance
-    if (!map) return
-    map.flyTo([volcano.lat, volcano.lng], 7, { duration: 1.2 })
+    if (!mapInstance) return
+    mapInstance.flyTo([volcano.lat, volcano.lng], 7, { duration: 1.2 })
     const color = volcano.alert_level === 'warning' ? '#f56565' :
       volcano.alert_level === 'watch' ? '#ed8936' :
         volcano.alert_level === 'advisory' ? '#ecc94b' : '#48bb78'
     const ring = L.circleMarker([volcano.lat, volcano.lng], {
       radius: 30, fillColor: 'transparent',
       color, weight: 3, opacity: 1,
-    }).addTo(map)
-    setTimeout(() => map.removeLayer(ring), 2500)
-  }, [])
+    }).addTo(mapInstance)
+    setTimeout(() => mapInstance.removeLayer(ring), 2500)
+  }, [mapInstance])
 
   return (
     <Box h="calc(100vh - 57px)" display="flex" flexDir="column" overflow="hidden">
