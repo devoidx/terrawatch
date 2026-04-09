@@ -34,7 +34,7 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const updateFilter = (patch) => setFilters(f => ({ ...f, ...patch }))
-  const mapInstanceRef = useRef(null)
+  const [mapInstance, setMapInstance] = useState(null)
 
   // ── Data queries ───────────────────────────────────────────────────────────
   const eqQuery = useQuery({
@@ -93,17 +93,17 @@ export default function Dashboard() {
   }
 
   const handleReset = useCallback(() => {
-    const map = mapInstanceRef.current
+    const map = mapInstance
     if (map) map.flyTo([20, 0], 3, { duration: 1.2 })
   }, [])
 
-  const handleMapReady = useCallback((mapInstance) => {
-    mapInstanceRef.current = mapInstance
+  const handleMapReady = useCallback((mapInst) => {
+    setMapInstance(mapInst)
   }, [])
 
   const handleEarthquakeSelect = useCallback((feature) => {
     const [lng, lat] = feature.geometry.coordinates
-    const map = mapInstanceRef.current
+    const map = mapInstance
     if (!map) return
     map.flyTo([lat, lng], 7, { duration: 1.2 })
     // Flash a highlight ring at the location
@@ -118,7 +118,7 @@ export default function Dashboard() {
   }, [])
 
   const handleVolcanoSelect = useCallback((volcano) => {
-    const map = mapInstanceRef.current
+    const map = mapInstance
     if (!map) return
     map.flyTo([volcano.lat, volcano.lng], 7, { duration: 1.2 })
     const color = volcano.alert_level === 'warning' ? '#f56565' :
@@ -172,7 +172,7 @@ export default function Dashboard() {
             onRefresh={handleRefresh}
             onReset={handleReset}
             lastUpdated={eqQuery.dataUpdatedAt}
-            map={mapInstanceRef.current}
+            map={mapInstance}
             earthquakeData={eqQuery.data}
           />
 
