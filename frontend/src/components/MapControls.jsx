@@ -371,6 +371,33 @@ export default function MapControls({
                     </>
                   )}
 
+                  {/* GDACS Global Alerts legend */}
+                  {activeOverlays.gdacs_alerts && (
+                    <>
+                      <Divider borderColor="whiteAlpha.100" mt={1} />
+                      <Text fontSize="2xs" fontWeight="700" color="gray.400"
+                        textTransform="uppercase" letterSpacing="wider">
+                        GDACS Global Alerts
+                      </Text>
+                      {[
+                        { color: '#f56565', label: '🔴 Red — Major impact' },
+                        { color: '#ed8936', label: '🟠 Orange — Moderate impact' },
+                      ].map(({ color, label }) => (
+                        <HStack key={label} spacing={2}>
+                          <Box w="10px" h="10px" borderRadius="full" flexShrink={0}
+                            bg={color} border="1px solid" borderColor="whiteAlpha.200" />
+                          <Text fontSize="2xs" color="gray.300">{label}</Text>
+                        </HStack>
+                      ))}
+                      <Text fontSize="2xs" color="gray.500" mt={1}>
+                        EQ · Tsunami · Cyclone · Flood · Volcano
+                      </Text>
+                      <Text fontSize="2xs" color="gray.600">
+                        © GDACS/JRC, last 7 days
+                      </Text>
+                    </>
+                  )}
+
                 </VStack>
               )}
             </VStack>
