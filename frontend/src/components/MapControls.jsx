@@ -296,6 +296,12 @@ export default function MapControls({
                     Fade = older events
                   </Text>
 
+                  {/* Tsunami coverage note */}
+                  {activeOverlays.tsunami_warnings && (
+                    <Text fontSize="2xs" color="gray.600" mt={1}>
+                      US/Pacific coverage only
+                    </Text>
+                  )}
                   {/* Active Faults legend */}
                   {activeOverlays.active_faults && (
                     <>

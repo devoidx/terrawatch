@@ -57,7 +57,7 @@ async function fetchCAPAlerts(url) {
 
 export const TsunamiWarningsOverlay = {
   id:    'tsunami_warnings',
-  label: 'Tsunami Alerts',
+  label: 'Tsunami Alerts (US)',
   icon:  '🌊',
   color: '#3b82f6',
 
