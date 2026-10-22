@@ -120,9 +120,8 @@ export default function TerraMap({
 
     L.control.zoom({ position: 'topright' }).addTo(mapObj.current)
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=' + (import.meta.env.VITE_CARTO_KEY || ''), {
       attribution: '© OpenStreetMap © CARTO',
-      subdomains: 'abcd',
       maxZoom: 19,
       minZoom: 3,
     }).addTo(mapObj.current)
